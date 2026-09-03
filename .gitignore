@@ -1,0 +1,7 @@
+/media/
+__pycache__/
+# Archivos compilados de Python
+*.pyc
+*.pyo
+*.pyd
+*.cpython-*.pyc
