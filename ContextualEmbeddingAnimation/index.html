@@ -2413,6 +2413,109 @@ animate();
 
 </script>
 
+<!-- =========================================================
+     SCRIPT PARA EFECTOS DE SONIDO (AÑADIDO SIN TOCAR EL RESTO)
+========================================================= -->
+<script>
+    (function() {
+        // Crear contexto de audio (se reanuda al primer clic o toque)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Función para reproducir un tono sencillo
+        function playTone(freq, duration = 0.18, volume = 0.25) {
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                // Silenciar errores
+            }
+        }
+
+        // Mapeo de textos a frecuencias (notas musicales aproximadas)
+        const soundMap = {
+            'RUNNING IN A RACE': () => playTone(523.25, 0.2),   // Do5
+            'RUNNING A MACHINE': () => playTone(659.25, 0.2),   // Mi5
+            'RUNNING A BUSINESS': () => playTone(783.99, 0.2),  // Sol5
+            'Attention lets tokens exchange information.': () => playTone(880.00, 0.25), // La5
+            'Each token incorporates information from others.': () => playTone(1046.50, 0.3), // Do6
+            'Training can create geometric structure.': () => playTone(1318.51, 0.35), // Mi6
+            'VECTOR SPACE + TRAINING → STRUCTURE': () => {
+                // Acorde final: dos notas
+                playTone(523.25, 0.4);
+                setTimeout(() => playTone(659.25, 0.4), 100);
+                setTimeout(() => playTone(783.99, 0.4), 200);
+            }
+        };
+
+        // Observar cambios en #caption
+        const captionEl = document.getElementById('caption');
+        let lastCaption = '';
+
+        const captionObserver = new MutationObserver(() => {
+            const text = captionEl.textContent.trim();
+            if (text && text !== lastCaption) {
+                lastCaption = text;
+                const fn = soundMap[text];
+                if (fn) {
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume().catch(() => {});
+                    }
+                    fn();
+                }
+            }
+        });
+
+        captionObserver.observe(captionEl, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+
+        // Observar cambios en #equation (solo para el mensaje final)
+        const equationEl = document.getElementById('equation');
+        let lastEquation = '';
+
+        const equationObserver = new MutationObserver(() => {
+            const text = equationEl.textContent.trim();
+            if (text && text !== lastEquation) {
+                lastEquation = text;
+                const fn = soundMap[text];
+                if (fn) {
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume().catch(() => {});
+                    }
+                    fn();
+                }
+            }
+        });
+
+        equationObserver.observe(equationEl, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+
+        // Reanudar contexto en la primera interacción del usuario
+        const resumeAudio = () => {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+            document.removeEventListener('click', resumeAudio);
+            document.removeEventListener('touchstart', resumeAudio);
+        };
+        document.addEventListener('click', resumeAudio);
+        document.addEventListener('touchstart', resumeAudio);
+    })();
+</script>
+
 </body>
 
 </html>
