@@ -9,11 +9,11 @@ import numpy as np
 config.frame_height = 8.0
 config.frame_width = 4.5
 
-config.pixel_width = 720
-config.pixel_height = 1280
+config.pixel_width = 1080
+config.pixel_height = 1920
 
 config.background_color = "#000000"
-config.frame_rate = 5
+config.frame_rate = 60
 
 
 # ============================================================
