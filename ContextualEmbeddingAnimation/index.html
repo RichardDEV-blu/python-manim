@@ -1,0 +1,1973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contextual Representations</title>
+
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap');
+
+    * {
+        box-sizing: border-box;
+    }
+
+    html,
+    body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000000;
+        font-family: 'Montserrat', sans-serif;
+    }
+
+    #scene {
+        position: fixed;
+        inset: 0;
+    }
+
+    canvas {
+        display: block;
+    }
+
+    #ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        color: #F5F5F7;
+    }
+
+    /* =====================================================
+       TITLE
+    ===================================================== */
+
+    #title {
+        position: absolute;
+        top: 38px;
+        left: 50%;
+        transform: translateX(-50%);
+
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: 2px;
+        white-space: nowrap;
+
+        opacity: 0;
+
+        transition:
+            opacity 1.2s ease;
+    }
+
+    /* =====================================================
+       SUBTITLE
+    ===================================================== */
+
+    #subtitle {
+        position: absolute;
+        top: 78px;
+        left: 50%;
+        transform: translateX(-50%);
+
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 1.5px;
+
+        color: #AAB0BF;
+
+        white-space: nowrap;
+
+        opacity: 0;
+
+        transition:
+            opacity 1.2s ease;
+    }
+
+    /* =====================================================
+       EQUATION
+    ===================================================== */
+
+    #equation {
+        position: absolute;
+        bottom: 105px;
+        left: 50%;
+        transform: translateX(-50%);
+
+        font-size: 23px;
+        font-weight: 700;
+        letter-spacing: 1px;
+
+        white-space: nowrap;
+
+        opacity: 0;
+
+        transition:
+            opacity 0.8s ease,
+            transform 0.8s ease;
+    }
+
+    /* =====================================================
+       CAPTION / CONTEXT
+    ===================================================== */
+
+    #caption {
+        position: absolute;
+        bottom: 48px;
+        left: 50%;
+        transform: translateX(-50%);
+
+        width: min(850px, 82vw);
+
+        text-align: center;
+
+        font-size: 14px;
+        line-height: 1.5;
+        font-weight: 500;
+        letter-spacing: 0.35px;
+
+        color: #AAB0BF;
+
+        opacity: 0;
+
+        transition:
+            opacity 0.8s ease,
+            transform 0.8s ease;
+    }
+
+</style>
+</head>
+
+<body>
+
+<div id="scene"></div>
+
+<div id="ui">
+
+    <div id="title">
+        CONTEXTUAL REPRESENTATIONS
+    </div>
+
+    <div id="subtitle">
+        WORD MEANING CAN CHANGE WITH CONTEXT
+    </div>
+
+    <div id="equation"></div>
+
+    <div id="caption"></div>
+
+</div>
+
+
+<script type="module">
+
+import * as THREE from
+    "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+
+/* =========================================================
+   RENDERER
+========================================================= */
+
+const renderer =
+    new THREE.WebGLRenderer({
+        antialias: true,
+        powerPreference: "high-performance"
+    });
+
+renderer.setPixelRatio(
+    Math.min(
+        window.devicePixelRatio,
+        1.25
+    )
+);
+
+renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+);
+
+renderer.setClearColor(
+    0x000000,
+    1
+);
+
+document
+    .getElementById("scene")
+    .appendChild(
+        renderer.domElement
+    );
+
+
+/* =========================================================
+   SCENE
+========================================================= */
+
+const scene =
+    new THREE.Scene();
+
+
+/* =========================================================
+   CAMERA
+========================================================= */
+
+const camera =
+    new THREE.PerspectiveCamera(
+        50,
+        window.innerWidth /
+        window.innerHeight,
+        0.1,
+        100
+    );
+
+const radius = 14;
+
+camera.position.set(
+    0,
+    0,
+    radius
+);
+
+
+/* =========================================================
+   WORLD
+========================================================= */
+
+const world =
+    new THREE.Group();
+
+scene.add(world);
+
+
+/* =========================================================
+   LIGHTING
+========================================================= */
+
+scene.add(
+    new THREE.AmbientLight(
+        0xffffff,
+        0.55
+    )
+);
+
+const pointLight =
+    new THREE.PointLight(
+        0xffffff,
+        1.2,
+        40
+    );
+
+pointLight.position.set(
+    5,
+    8,
+    10
+);
+
+scene.add(pointLight);
+
+
+/* =========================================================
+   GRID
+========================================================= */
+
+const grid =
+    new THREE.GridHelper(
+        18,
+        18,
+        0x555B70,
+        0x2B2F3A
+    );
+
+grid.material.transparent = true;
+grid.material.opacity = 0.18;
+
+world.add(grid);
+
+
+/* =========================================================
+   AXES
+========================================================= */
+
+function createAxis(
+    direction,
+    color
+) {
+
+    const points = [
+        new THREE.Vector3(
+            0,
+            0,
+            0
+        ),
+        direction
+    ];
+
+    const geometry =
+        new THREE.BufferGeometry()
+            .setFromPoints(
+                points
+            );
+
+    const material =
+        new THREE.LineBasicMaterial({
+            color,
+            transparent: true,
+            opacity: 0.22
+        });
+
+    return new THREE.Line(
+        geometry,
+        material
+    );
+}
+
+
+world.add(
+    createAxis(
+        new THREE.Vector3(
+            7,
+            0,
+            0
+        ),
+        0x555B70
+    )
+);
+
+world.add(
+    createAxis(
+        new THREE.Vector3(
+            0,
+            7,
+            0
+        ),
+        0x555B70
+    )
+);
+
+world.add(
+    createAxis(
+        new THREE.Vector3(
+            0,
+            0,
+            7
+        ),
+        0x555B70
+    )
+);
+
+
+/* =========================================================
+   PARTICLE FIELD
+========================================================= */
+
+const particleCount = 150;
+
+const particleGeometry =
+    new THREE.BufferGeometry();
+
+const particlePositions =
+    new Float32Array(
+        particleCount * 3
+    );
+
+for (
+    let i = 0;
+    i < particleCount;
+    i++
+) {
+
+    particlePositions[
+        i * 3
+    ] =
+        (Math.random() - 0.5)
+        * 18;
+
+    particlePositions[
+        i * 3 + 1
+    ] =
+        (Math.random() - 0.5)
+        * 12;
+
+    particlePositions[
+        i * 3 + 2
+    ] =
+        (Math.random() - 0.5)
+        * 12;
+}
+
+particleGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+        particlePositions,
+        3
+    )
+);
+
+const particleMaterial =
+    new THREE.PointsMaterial({
+        color: 0x555B70,
+        size: 0.035,
+        transparent: true,
+        opacity: 0
+    });
+
+const particles =
+    new THREE.Points(
+        particleGeometry,
+        particleMaterial
+    );
+
+world.add(particles);
+
+
+/* =========================================================
+   VECTOR DIRECTIONS
+========================================================= */
+
+const dirA =
+    new THREE.Vector3(
+        3,
+        2,
+        1
+    ).normalize();
+
+const dirB =
+    new THREE.Vector3(
+        2.2,
+        2.8,
+        1.8
+    ).normalize();
+
+const dirC =
+    new THREE.Vector3(
+        -2,
+        2.5,
+        2
+    ).normalize();
+
+
+/* =========================================================
+   VECTOR CREATION
+========================================================= */
+
+function createVector(
+    direction,
+    color
+) {
+
+    return new THREE.ArrowHelper(
+        direction,
+        new THREE.Vector3(
+            0,
+            0,
+            0
+        ),
+        0,
+        color,
+        0.38,
+        0.18
+    );
+}
+
+
+const vectorA =
+    createVector(
+        dirA,
+        0x6EA8FE
+    );
+
+const vectorB =
+    createVector(
+        dirB,
+        0xC084FC
+    );
+
+const vectorC =
+    createVector(
+        dirC,
+        0x4ADE80
+    );
+
+
+vectorA.visible = false;
+vectorB.visible = false;
+vectorC.visible = false;
+
+world.add(vectorA);
+world.add(vectorB);
+world.add(vectorC);
+
+
+/* =========================================================
+   EMBEDDING LABELS
+========================================================= */
+
+function createTextSprite(
+    text,
+    color
+) {
+
+    const canvas =
+        document.createElement(
+            "canvas"
+        );
+
+    canvas.width = 512;
+    canvas.height = 128;
+
+    const ctx =
+        canvas.getContext(
+            "2d"
+        );
+
+    ctx.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    ctx.font =
+        "800 48px Montserrat";
+
+    ctx.fillStyle =
+        color;
+
+    ctx.textAlign =
+        "center";
+
+    ctx.textBaseline =
+        "middle";
+
+    ctx.fillText(
+        text,
+        canvas.width / 2,
+        canvas.height / 2
+    );
+
+    const texture =
+        new THREE.CanvasTexture(
+            canvas
+        );
+
+    texture.minFilter =
+        THREE.LinearFilter;
+
+    texture.magFilter =
+        THREE.LinearFilter;
+
+    const material =
+        new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            opacity: 0,
+            depthTest: false,
+            depthWrite: false
+        });
+
+    const sprite =
+        new THREE.Sprite(
+            material
+        );
+
+    sprite.scale.set(
+        1.45,
+        0.36,
+        1
+    );
+
+    return sprite;
+}
+
+
+const labelA =
+    createTextSprite(
+        "RUN₁",
+        "#6EA8FE"
+    );
+
+const labelB =
+    createTextSprite(
+        "RUN₂",
+        "#C084FC"
+    );
+
+const labelC =
+    createTextSprite(
+        "RUN₃",
+        "#4ADE80"
+    );
+
+
+world.add(labelA);
+world.add(labelB);
+world.add(labelC);
+
+
+/* =========================================================
+   UPDATE VECTOR LABEL
+========================================================= */
+
+function updateVectorLabel(
+    label,
+    direction,
+    length
+) {
+
+    label.position.copy(
+        direction
+    );
+
+    label.position.multiplyScalar(
+        length + 0.45
+    );
+}
+
+
+/* =========================================================
+   TOKENS
+========================================================= */
+
+const tokenPositions = [
+
+    [
+        -3.5,
+        0.5,
+        0
+    ],
+
+    [
+        -1.8,
+        1.5,
+        0.3
+    ],
+
+    [
+        0,
+        0.8,
+        0
+    ],
+
+    [
+        1.8,
+        1.7,
+        -0.2
+    ],
+
+    [
+        3.5,
+        0.5,
+        0
+    ]
+];
+
+
+const tokenColors = [
+
+    0x6EA8FE,
+    0xC084FC,
+    0x4ADE80,
+    0xF5F5F7,
+    0x6EA8FE
+];
+
+
+const tokens = [];
+
+
+for (
+    let i = 0;
+    i < tokenPositions.length;
+    i++
+) {
+
+    const geometry =
+        new THREE.SphereGeometry(
+            0.16,
+            12,
+            12
+        );
+
+    const material =
+        new THREE.MeshBasicMaterial({
+            color:
+                tokenColors[i],
+            transparent: true,
+            opacity: 0
+        });
+
+    const token =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    token.position.set(
+        ...tokenPositions[i]
+    );
+
+    token.scale.setScalar(
+        0
+    );
+
+    world.add(token);
+
+    tokens.push(token);
+}
+
+
+/* =========================================================
+   ATTENTION LINES
+========================================================= */
+
+const attentionLines = [];
+
+
+for (
+    let i = 0;
+    i < tokens.length;
+    i++
+) {
+
+    for (
+        let j = i + 1;
+        j < tokens.length;
+        j++
+    ) {
+
+        const geometry =
+            new THREE.BufferGeometry()
+                .setFromPoints([
+                    tokens[i].position,
+                    tokens[j].position
+                ]);
+
+        const material =
+            new THREE.LineBasicMaterial({
+                color: 0x555B70,
+                transparent: true,
+                opacity: 0
+            });
+
+        const line =
+            new THREE.Line(
+                geometry,
+                material
+            );
+
+        world.add(line);
+
+        attentionLines.push(
+            line
+        );
+    }
+}
+
+
+/* =========================================================
+   ATTENTION PULSES
+========================================================= */
+
+const pulses = [];
+
+
+for (
+    let i = 0;
+    i < 5;
+    i++
+) {
+
+    const geometry =
+        new THREE.SphereGeometry(
+            0.055,
+            8,
+            8
+        );
+
+    const material =
+        new THREE.MeshBasicMaterial({
+            color: 0xF5F5F7,
+            transparent: true,
+            opacity: 0
+        });
+
+    const pulse =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    pulse.userData.edge =
+        i %
+        attentionLines.length;
+
+    pulse.userData.progress =
+        Math.random();
+
+    world.add(pulse);
+
+    pulses.push(pulse);
+}
+
+
+/* =========================================================
+   EMERGENT STRUCTURE
+========================================================= */
+
+const structureGroup =
+    new THREE.Group();
+
+structureGroup.visible =
+    false;
+
+world.add(
+    structureGroup
+);
+
+
+const structurePoints = [
+
+    [
+        -2.2,
+        1.0,
+        0
+    ],
+
+    [
+        -0.8,
+        2.2,
+        0.8
+    ],
+
+    [
+        1.0,
+        1.5,
+        -0.3
+    ],
+
+    [
+        2.3,
+        0.3,
+        0.7
+    ],
+
+    [
+        0.4,
+        -0.8,
+        0
+    ]
+];
+
+
+const structureMeshes = [];
+
+
+for (
+    const position of structurePoints
+) {
+
+    const geometry =
+        new THREE.SphereGeometry(
+            0.10,
+            10,
+            10
+        );
+
+    const material =
+        new THREE.MeshBasicMaterial({
+            color: 0xF5F5F7,
+            transparent: true,
+            opacity: 0
+        });
+
+    const mesh =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    mesh.position.set(
+        ...position
+    );
+
+    structureGroup.add(
+        mesh
+    );
+
+    structureMeshes.push(
+        mesh
+    );
+}
+
+
+const structureEdges = [
+
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [4, 0],
+    [0, 2],
+    [1, 3],
+    [2, 4]
+
+];
+
+
+const structureLines = [];
+
+
+for (
+    const [a, b]
+    of structureEdges
+) {
+
+    const geometry =
+        new THREE.BufferGeometry()
+            .setFromPoints([
+                structureMeshes[a].position,
+                structureMeshes[b].position
+            ]);
+
+    const material =
+        new THREE.LineBasicMaterial({
+            color: 0x8E95A8,
+            transparent: true,
+            opacity: 0
+        });
+
+    const line =
+        new THREE.Line(
+            geometry,
+            material
+        );
+
+    structureGroup.add(
+        line
+    );
+
+    structureLines.push(
+        line
+    );
+}
+
+
+/* =========================================================
+   UI ELEMENTS
+========================================================= */
+
+const title =
+    document.getElementById(
+        "title"
+    );
+
+const subtitle =
+    document.getElementById(
+        "subtitle"
+    );
+
+const equation =
+    document.getElementById(
+        "equation"
+    );
+
+const caption =
+    document.getElementById(
+        "caption"
+    );
+
+
+/* =========================================================
+   UI STATE
+========================================================= */
+
+let captionTimer = null;
+let equationTimer = null;
+
+let currentCaption = "";
+let currentEquation = "";
+
+
+/* =========================================================
+   CAPTION TRANSITION
+========================================================= */
+
+function showCaption(
+    text
+) {
+
+    if (
+        currentCaption === text
+    ) {
+        return;
+    }
+
+    currentCaption =
+        text;
+
+    if (captionTimer) {
+
+        clearTimeout(
+            captionTimer
+        );
+    }
+
+    caption.style.opacity =
+        "0";
+
+    caption.style.transform =
+        "translateX(-50%) translateY(8px)";
+
+
+    captionTimer =
+        setTimeout(() => {
+
+            caption.textContent =
+                text;
+
+            caption.style.opacity =
+                "1";
+
+            caption.style.transform =
+                "translateX(-50%) translateY(0)";
+
+        }, 150);
+}
+
+
+/* =========================================================
+   EQUATION TRANSITION
+========================================================= */
+
+function showEquation(
+    text
+) {
+
+    if (
+        currentEquation === text
+    ) {
+        return;
+    }
+
+    currentEquation =
+        text;
+
+    if (equationTimer) {
+
+        clearTimeout(
+            equationTimer
+        );
+    }
+
+    equation.style.opacity =
+        "0";
+
+    equation.style.transform =
+        "translateX(-50%) translateY(8px)";
+
+
+    equationTimer =
+        setTimeout(() => {
+
+            equation.textContent =
+                text;
+
+            equation.style.opacity =
+                "1";
+
+            equation.style.transform =
+                "translateX(-50%) translateY(0)";
+
+        }, 150);
+}
+
+
+/* =========================================================
+   HIDE EQUATION
+========================================================= */
+
+function hideEquation() {
+
+    currentEquation = "";
+
+    if (equationTimer) {
+
+        clearTimeout(
+            equationTimer
+        );
+    }
+
+    equation.style.opacity =
+        "0";
+}
+
+
+/* =========================================================
+   EASING
+========================================================= */
+
+function easeOutCubic(t) {
+
+    t =
+        THREE.MathUtils.clamp(
+            t,
+            0,
+            1
+        );
+
+    return 1 -
+        Math.pow(
+            1 - t,
+            3
+        );
+}
+
+
+function easeInOutCubic(t) {
+
+    t =
+        THREE.MathUtils.clamp(
+            t,
+            0,
+            1
+        );
+
+    return t < 0.5
+        ? 4 * t * t * t
+        : 1 -
+          Math.pow(
+              -2 * t + 2,
+              3
+          ) / 2;
+}
+
+
+/* =========================================================
+   SCENE STATE
+========================================================= */
+
+let currentScene = -1;
+
+
+/* =========================================================
+   INITIAL CAPTION STATE
+========================================================= */
+
+let currentContext =
+    "";
+
+
+/* =========================================================
+   CLOCK
+========================================================= */
+
+const clock =
+    new THREE.Clock();
+
+let elapsed = 0;
+
+
+/* =========================================================
+   ANIMATION
+========================================================= */
+
+function animate() {
+
+    requestAnimationFrame(
+        animate
+    );
+
+
+    const dt =
+        clock.getDelta();
+
+    elapsed += dt;
+
+    const t =
+        elapsed;
+
+
+    /* =====================================================
+       CAMERA
+    ===================================================== */
+
+    const theta =
+        THREE.MathUtils.degToRad(
+            -45 +
+            Math.sin(
+                t * 0.025
+            ) * 2
+        );
+
+    const phi =
+        THREE.MathUtils.degToRad(
+            65
+        );
+
+
+    camera.position.x =
+        radius *
+        Math.sin(phi) *
+        Math.cos(theta);
+
+    camera.position.y =
+        radius *
+        Math.cos(phi);
+
+    camera.position.z =
+        radius *
+        Math.sin(phi) *
+        Math.sin(theta);
+
+
+    camera.lookAt(
+        0,
+        0.7,
+        0
+    );
+
+
+    /* =====================================================
+       WORLD ROTATION
+    ===================================================== */
+
+    world.rotation.y =
+        t * 0.018;
+
+
+    /* =====================================================
+       PARTICLES
+    ===================================================== */
+
+    if (t < 5) {
+
+        particleMaterial.opacity =
+            easeOutCubic(
+                t / 4
+            ) * 0.5;
+
+    } else {
+
+        particleMaterial.opacity =
+            0.35;
+    }
+
+
+    /* =====================================================
+       SCENE 1
+       INTRO
+       0 → 5
+    ===================================================== */
+
+    if (t < 5) {
+
+        if (
+            currentScene !== 0
+        ) {
+
+            currentScene = 0;
+
+            title.style.opacity =
+                "1";
+
+            subtitle.style.opacity =
+                "1";
+
+            hideEquation();
+
+            showCaption(
+                "A word does not always have the same representation."
+            );
+        }
+    }
+
+
+   /* =====================================================
+   SCENE 2
+   INITIAL VECTORS
+   5 → 11
+===================================================== */
+
+else if (t < 11) {
+
+    if (currentScene !== 1) {
+
+        currentScene = 1;
+
+        vectorA.visible = true;
+        vectorB.visible = false;
+        vectorC.visible = false;
+
+        labelA.material.opacity = 0;
+        labelB.material.opacity = 0;
+        labelC.material.opacity = 0;
+
+        currentContext = "";
+
+        showEquation(
+            "RUN₁ ≈ RUN₂"
+        );
+    }
+
+
+    /* =================================================
+       RUN₁
+       5.0s
+    ================================================= */
+
+    vectorA.visible = true;
+
+    const progressA =
+        easeOutCubic(
+            (t - 5) /
+            (4 / 1.2)
+        );
+
+    const lengthA =
+        Math.min(
+            4,
+            4 * progressA
+        );
+
+    vectorA.setLength(
+        lengthA,
+        0.38,
+        0.18
+    );
+
+    updateVectorLabel(
+        labelA,
+        dirA,
+        lengthA
+    );
+
+
+    /* RUN₁ label */
+
+    const labelAProgress =
+        easeOutCubic(
+            (t - 5) / 0.6
+        );
+
+    labelA.material.opacity =
+        labelAProgress;
+
+
+    /* RUN₁ context */
+
+    if (
+        t >= 5 &&
+        currentContext !== "race"
+    ) {
+
+        currentContext =
+            "race";
+
+        showCaption(
+            "RUNNING IN A RACE"
+        );
+    }
+
+
+    /* =================================================
+       RUN₂
+       7.0s
+    ================================================= */
+
+    if (t >= 7) {
+
+        vectorB.visible = true;
+
+        const progressB =
+            easeOutCubic(
+                (t - 7) /
+                (4 / 1.2)
+            );
+
+        const lengthB =
+            Math.min(
+                4,
+                4 * progressB
+            );
+
+        vectorB.setLength(
+            lengthB,
+            0.38,
+            0.18
+        );
+
+        updateVectorLabel(
+            labelB,
+            dirB,
+            lengthB
+        );
+
+
+        /* RUN₂ label */
+
+        labelB.material.opacity =
+            easeOutCubic(
+                (t - 7) / 0.6
+            );
+
+
+        /* RUN₂ context */
+
+        if (
+            currentContext !== "machine"
+        ) {
+
+            currentContext =
+                "machine";
+
+            showCaption(
+                "RUNNING A MACHINE"
+            );
+        }
+    }
+}
+
+
+/* =====================================================
+   SCENE 3
+   RUN₃ / THIRD CONTEXT
+   11 → 15
+===================================================== */
+
+else if (t < 15) {
+
+    if (currentScene !== 2) {
+
+        currentScene = 2;
+
+        vectorA.visible = true;
+        vectorB.visible = true;
+        vectorC.visible = true;
+
+        showEquation(
+            "RUN₁ ≈ RUN₂ ≈ RUN₃"
+        );
+    }
+
+
+    /* =================================================
+       RUN₁
+    ================================================= */
+
+    vectorA.setLength(
+        4,
+        0.38,
+        0.18
+    );
+
+    updateVectorLabel(
+        labelA,
+        dirA,
+        4
+    );
+
+    labelA.material.opacity = 1;
+
+
+    /* =================================================
+       RUN₂
+    ================================================= */
+
+    vectorB.setLength(
+        4,
+        0.38,
+        0.18
+    );
+
+    updateVectorLabel(
+        labelB,
+        dirB,
+        4
+    );
+
+    labelB.material.opacity = 1;
+
+
+    /* =================================================
+       RUN₃
+       Starts exactly at 11.0s
+    ================================================= */
+
+    const progressC =
+        easeOutCubic(
+            (t - 11) /
+            (3.8 / 1.2)
+        );
+
+    const lengthC =
+        Math.min(
+            3.8,
+            3.8 * progressC
+        );
+
+    vectorC.setLength(
+        lengthC,
+        0.38,
+        0.18
+    );
+
+    updateVectorLabel(
+        labelC,
+        dirC,
+        lengthC
+    );
+
+
+    /* RUN₃ label */
+
+    labelC.material.opacity =
+        easeOutCubic(
+            (t - 11) / 0.6
+        );
+
+
+    /* RUN₃ context */
+
+    if (
+        t >= 11 &&
+        currentContext !== "business"
+    ) {
+
+        currentContext =
+            "business";
+
+        showCaption(
+            "RUNNING A BUSINESS"
+        );
+    }
+}
+
+    /* =====================================================
+       SCENE 4
+       ATTENTION
+       15 → 23
+    ===================================================== */
+
+    else if (t < 23) {
+
+        if (
+            currentScene !== 3
+        ) {
+
+            currentScene = 3;
+
+            hideEquation();
+
+            currentContext =
+                "attention";
+
+            showCaption(
+                "Attention lets tokens exchange information."
+            );
+        }
+
+
+        /* =================================================
+           Vector retraction
+           15 → 17
+        ================================================= */
+
+        const fadeProgress =
+            easeInOutCubic(
+                (t - 15) / 2
+            );
+
+
+        const remaining =
+            1 - fadeProgress;
+
+
+        if (t < 17) {
+
+            vectorA.visible = true;
+            vectorB.visible = true;
+            vectorC.visible = true;
+
+
+            vectorA.setLength(
+                4 * remaining,
+                0.38,
+                0.18
+            );
+
+            vectorB.setLength(
+                4 * remaining,
+                0.38,
+                0.18
+            );
+
+            vectorC.setLength(
+                3.8 * remaining,
+                0.38,
+                0.18
+            );
+
+
+            labelA.material.opacity =
+                remaining;
+
+            labelB.material.opacity =
+                remaining;
+
+            labelC.material.opacity =
+                remaining;
+
+        } else {
+
+            /*
+             * Hide the entire ArrowHelper.
+             *
+             * This removes:
+             *   - shaft
+             *   - arrow head
+             *
+             * Nothing remains floating.
+             */
+
+            vectorA.visible = false;
+            vectorB.visible = false;
+            vectorC.visible = false;
+
+
+            labelA.material.opacity = 0;
+            labelB.material.opacity = 0;
+            labelC.material.opacity = 0;
+        }
+
+
+        /* =================================================
+           Tokens
+        ================================================= */
+
+        const tokenProgress =
+            easeOutCubic(
+                (t - 15) / 2
+            );
+
+
+        for (
+            const token
+            of tokens
+        ) {
+
+            token.scale.setScalar(
+                tokenProgress
+            );
+
+            token.material.opacity =
+                tokenProgress;
+        }
+
+
+        /* =================================================
+           Attention lines
+        ================================================= */
+
+        const lineProgress =
+            easeOutCubic(
+                (t - 16) / 3
+            );
+
+
+        for (
+            const line
+            of attentionLines
+        ) {
+
+            line.material.opacity =
+                lineProgress *
+                0.32;
+        }
+    }
+
+
+    /* =====================================================
+       SCENE 5
+       INFORMATION FLOW
+       23 → 27
+    ===================================================== */
+
+    else if (t < 27) {
+
+        if (
+            currentScene !== 4
+        ) {
+
+            currentScene = 4;
+
+            showCaption(
+                "Each token incorporates information from others."
+            );
+        }
+
+
+        /* =================================================
+           Tokens
+        ================================================= */
+
+        for (
+            const token
+            of tokens
+        ) {
+
+            token.scale.setScalar(
+                1
+            );
+
+            token.material.opacity =
+                1;
+        }
+
+
+        /* =================================================
+           Attention lines
+        ================================================= */
+
+        for (
+            const line
+            of attentionLines
+        ) {
+
+            line.material.opacity =
+                0.28;
+        }
+
+
+        /* =================================================
+           Pulses
+        ================================================= */
+
+        for (
+            const pulse
+            of pulses
+        ) {
+
+            const line =
+                attentionLines[
+                    pulse.userData.edge
+                ];
+
+
+            pulse.userData.progress +=
+                dt * 0.35;
+
+
+            if (
+                pulse.userData.progress >= 1
+            ) {
+
+                pulse.userData.progress =
+                    0;
+            }
+
+
+            const position =
+                line.geometry
+                    .attributes
+                    .position;
+
+
+            const ax =
+                position.getX(0);
+
+            const ay =
+                position.getY(0);
+
+            const az =
+                position.getZ(0);
+
+            const bx =
+                position.getX(1);
+
+            const by =
+                position.getY(1);
+
+            const bz =
+                position.getZ(1);
+
+
+            const p =
+                pulse.userData.progress;
+
+
+            pulse.position.set(
+
+                THREE.MathUtils.lerp(
+                    ax,
+                    bx,
+                    p
+                ),
+
+                THREE.MathUtils.lerp(
+                    ay,
+                    by,
+                    p
+                ),
+
+                THREE.MathUtils.lerp(
+                    az,
+                    bz,
+                    p
+                )
+
+            );
+
+
+            pulse.material.opacity =
+                0.8;
+        }
+    }
+
+
+    /* =====================================================
+       SCENE 6
+       EMERGENT GEOMETRY
+       27+
+    ===================================================== */
+
+    else {
+
+        if (
+            currentScene !== 5
+        ) {
+
+            currentScene = 5;
+
+            showEquation(
+                "VECTOR SPACE + TRAINING → STRUCTURE"
+            );
+
+            showCaption(
+                "Training can create geometric structure."
+            );
+
+            structureGroup.visible =
+                true;
+        }
+
+
+        /* =================================================
+           Fade attention
+        ================================================= */
+
+        const attentionFade =
+            easeInOutCubic(
+                (t - 27) / 2
+            );
+
+
+        const attentionOpacity =
+            1 - attentionFade;
+
+
+        for (
+            const token
+            of tokens
+        ) {
+
+            token.material.opacity =
+                attentionOpacity;
+        }
+
+
+        for (
+            const line
+            of attentionLines
+        ) {
+
+            line.material.opacity =
+                0.28 *
+                attentionOpacity;
+        }
+
+
+        for (
+            const pulse
+            of pulses
+        ) {
+
+            pulse.material.opacity =
+                attentionOpacity *
+                0.8;
+        }
+
+
+        /* =================================================
+           Emergent structure
+        ================================================= */
+
+        const structureProgress =
+            easeOutCubic(
+                (t - 27) / 2.5
+            );
+
+
+        for (
+            const point
+            of structureMeshes
+        ) {
+
+            point.material.opacity =
+                structureProgress;
+        }
+
+
+        for (
+            const line
+            of structureLines
+        ) {
+
+            line.material.opacity =
+                structureProgress *
+                0.65;
+        }
+    }
+
+
+    /* =====================================================
+       RENDER
+    ===================================================== */
+
+    renderer.render(
+        scene,
+        camera
+    );
+}
+
+
+/* =========================================================
+   RESIZE
+========================================================= */
+
+window.addEventListener(
+    "resize",
+    () => {
+
+        camera.aspect =
+            window.innerWidth /
+            window.innerHeight;
+
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+    }
+);
+
+
+/* =========================================================
+   START
+========================================================= */
+
+animate();
+
+</script>
+
+</body>
+</html>
