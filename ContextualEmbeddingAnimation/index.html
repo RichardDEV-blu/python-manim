@@ -107,7 +107,7 @@
     }
 
     /* =====================================================
-       CAPTION / CONTEXT
+       CAPTION
     ===================================================== */
 
     #caption {
@@ -454,18 +454,32 @@ function createVector(
     color
 ) {
 
-    return new THREE.ArrowHelper(
-        direction,
-        new THREE.Vector3(
+    const arrow =
+        new THREE.ArrowHelper(
+            direction,
+            new THREE.Vector3(
+                0,
+                0,
+                0
+            ),
             0,
-            0,
-            0
-        ),
-        0,
-        color,
-        0.38,
-        0.18
-    );
+            color,
+            0.38,
+            0.18
+        );
+
+    /*
+     * Keep shaft and arrow head
+     * independently transparent.
+     */
+
+    arrow.line.material.transparent = true;
+    arrow.cone.material.transparent = true;
+
+    arrow.line.material.opacity = 1;
+    arrow.cone.material.opacity = 1;
+
+    return arrow;
 }
 
 
@@ -862,7 +876,8 @@ const structureMeshes = [];
 
 
 for (
-    const position of structurePoints
+    const position
+    of structurePoints
 ) {
 
     const geometry =
@@ -952,7 +967,7 @@ for (
 
 
 /* =========================================================
-   UI ELEMENTS
+   UI
 ========================================================= */
 
 const title =
@@ -988,7 +1003,7 @@ let currentEquation = "";
 
 
 /* =========================================================
-   CAPTION TRANSITION
+   CAPTION
 ========================================================= */
 
 function showCaption(
@@ -1035,7 +1050,7 @@ function showCaption(
 
 
 /* =========================================================
-   EQUATION TRANSITION
+   EQUATION
 ========================================================= */
 
 function showEquation(
@@ -1149,14 +1164,6 @@ let currentScene = -1;
 
 
 /* =========================================================
-   INITIAL CAPTION STATE
-========================================================= */
-
-let currentContext =
-    "";
-
-
-/* =========================================================
    CLOCK
 ========================================================= */
 
@@ -1238,7 +1245,9 @@ function animate() {
        PARTICLES
     ===================================================== */
 
-    if (t < 5) {
+    if (
+        t < 5
+    ) {
 
         particleMaterial.opacity =
             easeOutCubic(
@@ -1253,12 +1262,13 @@ function animate() {
 
 
     /* =====================================================
-       SCENE 1
-       INTRO
+       SCENE 1 — INTRO
        0 → 5
     ===================================================== */
 
-    if (t < 5) {
+    if (
+        t < 5
+    ) {
 
         if (
             currentScene !== 0
@@ -1281,116 +1291,199 @@ function animate() {
     }
 
 
-   /* =====================================================
-   SCENE 2
-   INITIAL VECTORS
-   5 → 11
-===================================================== */
+    /* =====================================================
+       SCENE 2 — FIRST TWO CONTEXTS
+       5 → 11
 
-else if (t < 11) {
+       RUN₁ = 5s
+       RUN₂ = 8s
+    ===================================================== */
 
-    if (currentScene !== 1) {
-
-        currentScene = 1;
-
-        vectorA.visible = true;
-        vectorB.visible = false;
-        vectorC.visible = false;
-
-        labelA.material.opacity = 0;
-        labelB.material.opacity = 0;
-        labelC.material.opacity = 0;
-
-        currentContext = "";
-
-        showEquation(
-            "RUN₁ ≈ RUN₂"
-        );
-    }
-
-
-    /* =================================================
-       RUN₁
-       5.0s
-    ================================================= */
-
-    vectorA.visible = true;
-
-    const progressA =
-        easeOutCubic(
-            (t - 5) /
-            (4 / 1.2)
-        );
-
-    const lengthA =
-        Math.min(
-            4,
-            4 * progressA
-        );
-
-    vectorA.setLength(
-        lengthA,
-        0.38,
-        0.18
-    );
-
-    updateVectorLabel(
-        labelA,
-        dirA,
-        lengthA
-    );
-
-
-    /* RUN₁ label */
-
-    const labelAProgress =
-        easeOutCubic(
-            (t - 5) / 0.6
-        );
-
-    labelA.material.opacity =
-        labelAProgress;
-
-
-    /* RUN₁ context */
-
-    if (
-        t >= 5 &&
-        currentContext !== "race"
+    else if (
+        t < 11
     ) {
 
-        currentContext =
-            "race";
+        if (
+            currentScene !== 1
+        ) {
 
-        showCaption(
-            "RUNNING IN A RACE"
+            currentScene = 1;
+
+            vectorA.visible = true;
+            vectorB.visible = false;
+            vectorC.visible = false;
+
+            labelA.material.opacity = 0;
+            labelB.material.opacity = 0;
+            labelC.material.opacity = 0;
+
+            currentEquation = "";
+
+            showEquation(
+                "RUN₁ ≈ RUN₂"
+            );
+        }
+
+
+        /* =================================================
+           RUN₁
+           5 → 8
+        ================================================= */
+
+        vectorA.visible = true;
+
+        const progressA =
+            easeOutCubic(
+                (t - 5) / 3
+            );
+
+        const lengthA =
+            4 * progressA;
+
+        vectorA.setLength(
+            lengthA,
+            0.38,
+            0.18
         );
+
+        updateVectorLabel(
+            labelA,
+            dirA,
+            lengthA
+        );
+
+
+        labelA.material.opacity =
+            easeOutCubic(
+                (t - 5) / 0.65
+            );
+
+
+        /*
+         * Context for RUN₁
+         */
+
+        if (
+            t >= 5 &&
+            currentCaption !==
+            "RUNNING IN A RACE"
+        ) {
+
+            showCaption(
+                "RUNNING IN A RACE"
+            );
+        }
+
+
+        /* =================================================
+           RUN₂
+           8 → 11
+        ================================================= */
+
+        if (
+            t >= 8
+        ) {
+
+            vectorB.visible = true;
+
+            const progressB =
+                easeOutCubic(
+                    (t - 8) / 3
+                );
+
+            const lengthB =
+                4 * progressB;
+
+            vectorB.setLength(
+                lengthB,
+                0.38,
+                0.18
+            );
+
+            updateVectorLabel(
+                labelB,
+                dirB,
+                lengthB
+            );
+
+
+            labelB.material.opacity =
+                easeOutCubic(
+                    (t - 8) / 0.65
+                );
+
+
+            /*
+             * Context for RUN₂
+             */
+
+            if (
+                t >= 8 &&
+                currentCaption !==
+                "RUNNING A MACHINE"
+            ) {
+
+                showCaption(
+                    "RUNNING A MACHINE"
+                );
+            }
+        }
     }
 
 
-    /* =================================================
-       RUN₂
-       7.0s
-    ================================================= */
+    /* =====================================================
+       SCENE 3 — THIRD CONTEXT
+       11 → 15
 
-    if (t >= 7) {
+       RUN₃ = 11s
+    ===================================================== */
 
-        vectorB.visible = true;
+    else if (
+        t < 15
+    ) {
 
-        const progressB =
-            easeOutCubic(
-                (t - 7) /
-                (4 / 1.2)
+        if (
+            currentScene !== 2
+        ) {
+
+            currentScene = 2;
+
+            vectorA.visible = true;
+            vectorB.visible = true;
+            vectorC.visible = true;
+
+            showEquation(
+                "RUN₁ ≈ RUN₂ ≈ RUN₃"
             );
+        }
 
-        const lengthB =
-            Math.min(
-                4,
-                4 * progressB
-            );
+
+        /* =================================================
+           RUN₁ remains
+        ================================================= */
+
+        vectorA.setLength(
+            4,
+            0.38,
+            0.18
+        );
+
+        updateVectorLabel(
+            labelA,
+            dirA,
+            4
+        );
+
+        labelA.material.opacity =
+            1;
+
+
+        /* =================================================
+           RUN₂ remains
+        ================================================= */
 
         vectorB.setLength(
-            lengthB,
+            4,
             0.38,
             0.18
         );
@@ -1398,156 +1491,76 @@ else if (t < 11) {
         updateVectorLabel(
             labelB,
             dirB,
-            lengthB
+            4
+        );
+
+        labelB.material.opacity =
+            1;
+
+
+        /* =================================================
+           RUN₃
+           11 → ~14.17
+        ================================================= */
+
+        vectorC.visible = true;
+
+        const progressC =
+            easeOutCubic(
+                (t - 11) /
+                (3.8 / 1.2)
+            );
+
+        const lengthC =
+            Math.min(
+                3.8,
+                3.8 * progressC
+            );
+
+        vectorC.setLength(
+            lengthC,
+            0.38,
+            0.18
+        );
+
+        updateVectorLabel(
+            labelC,
+            dirC,
+            lengthC
         );
 
 
-        /* RUN₂ label */
-
-        labelB.material.opacity =
+        labelC.material.opacity =
             easeOutCubic(
-                (t - 7) / 0.6
+                (t - 11) / 0.65
             );
 
 
-        /* RUN₂ context */
+        /*
+         * Context for RUN₃
+         */
 
         if (
-            currentContext !== "machine"
+            t >= 11 &&
+            currentCaption !==
+            "RUNNING A BUSINESS"
         ) {
 
-            currentContext =
-                "machine";
-
             showCaption(
-                "RUNNING A MACHINE"
+                "RUNNING A BUSINESS"
             );
         }
     }
-}
 
-
-/* =====================================================
-   SCENE 3
-   RUN₃ / THIRD CONTEXT
-   11 → 15
-===================================================== */
-
-else if (t < 15) {
-
-    if (currentScene !== 2) {
-
-        currentScene = 2;
-
-        vectorA.visible = true;
-        vectorB.visible = true;
-        vectorC.visible = true;
-
-        showEquation(
-            "RUN₁ ≈ RUN₂ ≈ RUN₃"
-        );
-    }
-
-
-    /* =================================================
-       RUN₁
-    ================================================= */
-
-    vectorA.setLength(
-        4,
-        0.38,
-        0.18
-    );
-
-    updateVectorLabel(
-        labelA,
-        dirA,
-        4
-    );
-
-    labelA.material.opacity = 1;
-
-
-    /* =================================================
-       RUN₂
-    ================================================= */
-
-    vectorB.setLength(
-        4,
-        0.38,
-        0.18
-    );
-
-    updateVectorLabel(
-        labelB,
-        dirB,
-        4
-    );
-
-    labelB.material.opacity = 1;
-
-
-    /* =================================================
-       RUN₃
-       Starts exactly at 11.0s
-    ================================================= */
-
-    const progressC =
-        easeOutCubic(
-            (t - 11) /
-            (3.8 / 1.2)
-        );
-
-    const lengthC =
-        Math.min(
-            3.8,
-            3.8 * progressC
-        );
-
-    vectorC.setLength(
-        lengthC,
-        0.38,
-        0.18
-    );
-
-    updateVectorLabel(
-        labelC,
-        dirC,
-        lengthC
-    );
-
-
-    /* RUN₃ label */
-
-    labelC.material.opacity =
-        easeOutCubic(
-            (t - 11) / 0.6
-        );
-
-
-    /* RUN₃ context */
-
-    if (
-        t >= 11 &&
-        currentContext !== "business"
-    ) {
-
-        currentContext =
-            "business";
-
-        showCaption(
-            "RUNNING A BUSINESS"
-        );
-    }
-}
 
     /* =====================================================
-       SCENE 4
-       ATTENTION
+       SCENE 4 — ATTENTION
        15 → 23
     ===================================================== */
 
-    else if (t < 23) {
+    else if (
+        t < 23
+    ) {
 
         if (
             currentScene !== 3
@@ -1557,9 +1570,6 @@ else if (t < 15) {
 
             hideEquation();
 
-            currentContext =
-                "attention";
-
             showCaption(
                 "Attention lets tokens exchange information."
             );
@@ -1567,7 +1577,7 @@ else if (t < 15) {
 
 
         /* =================================================
-           Vector retraction
+           VECTOR EXIT
            15 → 17
         ================================================= */
 
@@ -1576,17 +1586,22 @@ else if (t < 15) {
                 (t - 15) / 2
             );
 
-
         const remaining =
             1 - fadeProgress;
 
 
-        if (t < 17) {
+        if (
+            t < 17
+        ) {
 
             vectorA.visible = true;
             vectorB.visible = true;
             vectorC.visible = true;
 
+
+            /* ---------------------------------------------
+               SHAFTS RETRACT
+            --------------------------------------------- */
 
             vectorA.setLength(
                 4 * remaining,
@@ -1607,6 +1622,10 @@ else if (t < 15) {
             );
 
 
+            /* ---------------------------------------------
+               LABELS FADE
+            --------------------------------------------- */
+
             labelA.material.opacity =
                 remaining;
 
@@ -1616,21 +1635,66 @@ else if (t < 15) {
             labelC.material.opacity =
                 remaining;
 
+
+            /* ---------------------------------------------
+               ARROW HEADS FADE SEPARATELY
+               
+               The tips disappear gradually before
+               the complete vectors disappear.
+            --------------------------------------------- */
+
+            const tipFade =
+                1 -
+                easeInOutCubic(
+                    (t - 15) / 1.15
+                );
+
+
+            vectorA.cone.material.opacity =
+                tipFade;
+
+            vectorB.cone.material.opacity =
+                tipFade;
+
+            vectorC.cone.material.opacity =
+                tipFade;
+
+
+            /* ---------------------------------------------
+               SHAFT OPACITY
+            --------------------------------------------- */
+
+            vectorA.line.material.opacity =
+                remaining;
+
+            vectorB.line.material.opacity =
+                remaining;
+
+            vectorC.line.material.opacity =
+                remaining;
+
         } else {
 
             /*
-             * Hide the entire ArrowHelper.
+             * Complete cleanup.
              *
-             * This removes:
-             *   - shaft
-             *   - arrow head
-             *
-             * Nothing remains floating.
+             * No shaft.
+             * No arrow head.
+             * No floating tip.
              */
 
             vectorA.visible = false;
             vectorB.visible = false;
             vectorC.visible = false;
+
+
+            vectorA.line.material.opacity = 0;
+            vectorB.line.material.opacity = 0;
+            vectorC.line.material.opacity = 0;
+
+            vectorA.cone.material.opacity = 0;
+            vectorB.cone.material.opacity = 0;
+            vectorC.cone.material.opacity = 0;
 
 
             labelA.material.opacity = 0;
@@ -1640,7 +1704,7 @@ else if (t < 15) {
 
 
         /* =================================================
-           Tokens
+           TOKENS
         ================================================= */
 
         const tokenProgress =
@@ -1664,7 +1728,7 @@ else if (t < 15) {
 
 
         /* =================================================
-           Attention lines
+           ATTENTION LINES
         ================================================= */
 
         const lineProgress =
@@ -1686,12 +1750,13 @@ else if (t < 15) {
 
 
     /* =====================================================
-       SCENE 5
-       INFORMATION FLOW
+       SCENE 5 — INFORMATION FLOW
        23 → 27
     ===================================================== */
 
-    else if (t < 27) {
+    else if (
+        t < 27
+    ) {
 
         if (
             currentScene !== 4
@@ -1813,7 +1878,6 @@ else if (t < 15) {
                     bz,
                     p
                 )
-
             );
 
 
@@ -1824,8 +1888,7 @@ else if (t < 15) {
 
 
     /* =====================================================
-       SCENE 6
-       EMERGENT GEOMETRY
+       SCENE 6 — EMERGENT GEOMETRY
        27+
     ===================================================== */
 
@@ -1851,7 +1914,7 @@ else if (t < 15) {
 
 
         /* =================================================
-           Fade attention
+           Attention fades
         ================================================= */
 
         const attentionFade =
@@ -1859,9 +1922,9 @@ else if (t < 15) {
                 (t - 27) / 2
             );
 
-
         const attentionOpacity =
-            1 - attentionFade;
+            1 -
+            attentionFade;
 
 
         for (
