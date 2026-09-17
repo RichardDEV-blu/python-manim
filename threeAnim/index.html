@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Doxing · 1080×1920</title>
+  <title>Doxing · The darker side</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,7 +24,7 @@
       height: 100%;
       background: #000;
       overflow: hidden;
-      font-family: "Montserrat", "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-family: "Montserrat", "Segoe UI", system-ui, sans-serif;
       color: #ede9fe;
     }
 
@@ -32,7 +32,6 @@
       --stage-scale: 1;
     }
 
-    /* Stage fijo 1080x1920, centrado y escalado */
     #stage {
       position: fixed;
       left: 50%;
@@ -43,9 +42,7 @@
       transform-origin: center center;
       background: #0a0614;
       overflow: hidden;
-      box-shadow:
-        0 0 0 1px rgba(168, 85, 247, 0.15),
-        0 0 120px rgba(168, 85, 247, 0.18);
+      box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.15), 0 0 120px rgba(168, 85, 247, 0.18);
       isolation: isolate;
     }
 
@@ -74,7 +71,6 @@
       line-height: 1.5;
     }
 
-    /* UI de grabación (fuera del stage, no se graba) */
     #recBtn {
       position: fixed;
       top: 20px;
@@ -144,6 +140,7 @@
 
   <div id="stage">
     <div id="app"></div>
+    <div id="tag">OSINT / SCRAPING</div>
   </div>
 
   <button id="recBtn"><span class="dot"></span><span id="recLabel">Record</span></button>
@@ -154,9 +151,7 @@
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
-    /* ══════════════════════════════════════════════════════════════
-       FONT
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ FONT ══ */
     await Promise.all([
       document.fonts.load('500 16px Montserrat'),
       document.fonts.load('600 16px Montserrat'),
@@ -164,9 +159,7 @@
       document.fonts.load('800 16px Montserrat')
     ]);
 
-    /* ══════════════════════════════════════════════════════════════
-       UTILS
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ UTILS ══ */
     const clamp = THREE.MathUtils.clamp;
     function smoothstep(a, b, x) {
       const t = clamp((x - a) / (b - a), 0, 1);
@@ -191,13 +184,11 @@
       g.closePath();
     }
 
-    /* ══════════════════════════════════════════════════════════════
-       AUDIO — Vórtice oscuro (Web Audio sintetizado)
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ AUDIO SYSTEM — 5 efectos ══ */
     let audioCtx = null;
     let audioEnabled = true;
-    let IS_RECORDING = false;   // ← NUEVO: bandera global temprana
-    const vortexEvents = []; // para render offline
+    let IS_RECORDING = false;
+    const audioEvents = [];
 
     const _noiseBufs = new WeakMap();
     function getNoiseBuffer(ctx) {
@@ -210,63 +201,109 @@
       return buf;
     }
 
-    /* Construye el grafo del vórtice sobre cualquier AudioContext */
-    function scheduleVortexOnCtx(ctx, startTime, duration, intensity) {
-      const t0 = Math.max(0, startTime);
-      const noiseBuf = getNoiseBuffer(ctx);
-
-      // Ruido base
+    function scheduleWhoosh(ctx, t0, intensity) {
+      const dur = 0.45;
       const noise = ctx.createBufferSource();
-      noise.buffer = noiseBuf;
-
-      // Lowpass que abre-agudo y cierra-grave
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.Q.value = 10;
-      lp.frequency.setValueAtTime(4200, t0);
-      lp.frequency.exponentialRampToValueAtTime(140, t0 + duration);
-
-      // Bandpass resonante para el "whip" del vórtice
+      noise.buffer = getNoiseBuffer(ctx);
       const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.Q.value = 2.5;
-      bp.frequency.setValueAtTime(800, t0);
-      bp.frequency.exponentialRampToValueAtTime(110, t0 + duration);
-
-      // Gain maestro con envelope
+      bp.type = 'bandpass'; bp.Q.value = 1.8;
+      bp.frequency.setValueAtTime(180, t0);
+      bp.frequency.exponentialRampToValueAtTime(3400, t0 + dur * 0.4);
+      bp.frequency.exponentialRampToValueAtTime(200, t0 + dur);
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.linearRampToValueAtTime(intensity, t0 + 0.08);
-      gain.gain.setValueAtTime(intensity, t0 + duration * 0.45);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-
-      // Sub rumble grave
-      const sub = ctx.createOscillator();
-      sub.type = 'sine';
-      sub.frequency.setValueAtTime(190, t0);
-      sub.frequency.exponentialRampToValueAtTime(42, t0 + duration);
-
-      const subGain = ctx.createGain();
-      subGain.gain.setValueAtTime(0.0001, t0);
-      subGain.gain.linearRampToValueAtTime(intensity * 0.55, t0 + 0.1);
-      subGain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
-
-      // Rutas
-      noise.connect(lp).connect(gain);
-      noise.connect(bp).connect(gain);
-      gain.connect(ctx.destination);
-      sub.connect(subGain).connect(ctx.destination);
-
-      noise.start(t0);
-      noise.stop(t0 + duration + 0.05);
-      sub.start(t0);
-      sub.stop(t0 + duration + 0.05);
+      gain.gain.linearRampToValueAtTime(intensity, t0 + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      noise.connect(bp).connect(gain).connect(ctx.destination);
+      noise.start(t0); noise.stop(t0 + dur + 0.05);
     }
 
-    function triggerVortex(intensity = 0.4, duration = 0.9) {
-      vortexEvents.push({ time: elapsed, duration, intensity });
+    function scheduleBoom(ctx, t0, intensity) {
+      const dur = 1.8;
+      const sub = ctx.createOscillator();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(140, t0);
+      sub.frequency.exponentialRampToValueAtTime(32, t0 + dur * 0.85);
+      const subGain = ctx.createGain();
+      subGain.gain.setValueAtTime(0.0001, t0);
+      subGain.gain.linearRampToValueAtTime(intensity, t0 + 0.015);
+      subGain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      sub.connect(subGain).connect(ctx.destination);
+      sub.start(t0); sub.stop(t0 + dur + 0.05);
+
+      const noise = ctx.createBufferSource();
+      noise.buffer = getNoiseBuffer(ctx);
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(2200, t0);
+      lp.frequency.exponentialRampToValueAtTime(90, t0 + 0.5);
+      const nGain = ctx.createGain();
+      nGain.gain.setValueAtTime(intensity * 0.6, t0);
+      nGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+      noise.connect(lp).connect(nGain).connect(ctx.destination);
+      noise.start(t0); noise.stop(t0 + 0.6);
+    }
+
+    function scheduleBlip(ctx, t0, intensity = 0.15, baseFreq = 800) {
+      const dur = 0.18;
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(baseFreq, t0);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 2.1, t0 + dur * 0.5);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.75, t0 + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(intensity, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(g).connect(ctx.destination);
+      osc.start(t0); osc.stop(t0 + dur + 0.05);
+    }
+
+    function scheduleGlitch(ctx, t0, intensity = 0.25) {
+      const dur = 0.22;
+      const noise = ctx.createBufferSource();
+      noise.buffer = getNoiseBuffer(ctx);
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass'; bp.Q.value = 9;
+      bp.frequency.value = 900 + Math.random() * 1400;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(intensity, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      noise.connect(bp).connect(g).connect(ctx.destination);
+      noise.start(t0); noise.stop(t0 + dur + 0.05);
+    }
+
+    function scheduleDrone(ctx, t0, duration, intensity) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(55, t0);
+      osc.frequency.linearRampToValueAtTime(82, t0 + duration);
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.Q.value = 3;
+      lp.frequency.setValueAtTime(180, t0);
+      lp.frequency.linearRampToValueAtTime(700, t0 + duration);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.linearRampToValueAtTime(intensity, t0 + duration * 0.75);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+      osc.connect(lp).connect(g).connect(ctx.destination);
+      osc.start(t0); osc.stop(t0 + duration + 0.05);
+    }
+
+    function scheduleAudioEvent(ctx, type, t0, params = {}) {
+      switch (type) {
+        case 'whoosh': scheduleWhoosh(ctx, t0, params.intensity ?? 0.15); break;
+        case 'boom': scheduleBoom(ctx, t0, params.intensity ?? 0.4); break;
+        case 'blip': scheduleBlip(ctx, t0, params.intensity ?? 0.15, params.freq ?? 800); break;
+        case 'glitch': scheduleGlitch(ctx, t0, params.intensity ?? 0.25); break;
+        case 'drone': scheduleDrone(ctx, t0, params.duration ?? 6, params.intensity ?? 0.06); break;
+      }
+    }
+
+    function triggerAudio(type, params) {
+      audioEvents.push({ time: elapsed, type, params });
       if (audioCtx && audioEnabled && !IS_RECORDING) {
-        scheduleVortexOnCtx(audioCtx, audioCtx.currentTime + 0.01, duration, intensity);
+        scheduleAudioEvent(audioCtx, type, audioCtx.currentTime + 0.01, params);
       }
     }
 
@@ -278,32 +315,25 @@
     document.addEventListener('pointerdown', initAudio, { once: true });
     document.addEventListener('keydown', initAudio, { once: true });
 
-    /* ══════════════════════════════════════════════════════════════
-       RENDERER — fijo 1080x1920
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ RENDERER ══ */
     const stageEl = document.getElementById('stage');
 
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: 'high-performance',
-      alpha: false,
-      stencil: false,
-      depth: true,
-      preserveDrawingBuffer: true   // necesario para CCapture
+      antialias: true, powerPreference: 'high-performance',
+      alpha: false, stencil: false, depth: true,
+      preserveDrawingBuffer: true
     });
-    renderer.setPixelRatio(1);              // 1:1, canvas = 1080x1920 exactos
-    renderer.setSize(1080, 1920, false);    // false = no tocar CSS (lo controla #app)
+    renderer.setPixelRatio(1);
+    renderer.setSize(1080, 1920, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
-    if ('samples' in renderer) renderer.samples = 4;  // MSAA
+    if ('samples' in renderer) renderer.samples = 4;
     document.getElementById('app').appendChild(renderer.domElement);
 
     const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 
-    /* ══════════════════════════════════════════════════════════════
-       TEXTURAS
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ TEXTURES ══ */
     const circleTex = (() => {
       const s = 256, c = document.createElement('canvas');
       c.width = c.height = s;
@@ -332,112 +362,85 @@
       return t;
     })();
 
-    function makeSiteCanvas(seed) {
-      const SS = 3, L_W = 256, L_H = 320;
-      const c = document.createElement('canvas');
-      c.width = L_W * SS; c.height = L_H * SS;
-      const g = c.getContext('2d');
-      g.scale(SS, SS);
-      const rnd = mulberry32(seed);
-      const W = L_W, H = L_H;
-      g.fillStyle = '#0d0818'; g.fillRect(0, 0, W, H);
-      g.fillStyle = '#1a1028'; g.fillRect(0, 0, W, 28);
-      ['#ff5f57', '#febc2e', '#28c840'].forEach((col, i) => {
-        g.fillStyle = col;
-        g.beginPath(); g.arc(16 + i * 15, 14, 4.5, 0, Math.PI * 2); g.fill();
-      });
-      g.fillStyle = '#2a1b44'; roundRect(g, 62, 7, W - 76, 14, 7); g.fill();
-      g.fillStyle = '#1c1035'; g.fillRect(0, 28, W, 56);
-      g.fillStyle = '#3b1f6b'; g.beginPath(); g.arc(38, 56, 18, 0, Math.PI * 2); g.fill();
-      g.fillStyle = '#6b3fa8'; g.beginPath(); g.arc(38, 50, 7, 0, Math.PI * 2); g.fill();
-      g.beginPath(); g.arc(38, 74, 12, Math.PI, Math.PI * 2); g.fill();
-      g.fillStyle = 'rgba(196,181,253,0.55)'; g.fillRect(66, 44, 92, 9);
-      g.fillStyle = 'rgba(139,92,246,0.5)'; g.fillRect(66, 62, 62, 7);
-      let y = 100;
-      for (let i = 0; i < 7; i++) {
-        const w = 55 + rnd() * 150;
-        g.fillStyle = `rgba(168,140,240,${0.14 + rnd() * 0.24})`;
-        g.fillRect(16, y, w, 7);
-        y += 15; if (rnd() > 0.7) y += 7;
-      }
-      const gy = 218;
-      for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) {
-        const bx = 16 + i * 78, by = gy + j * 46;
-        g.fillStyle = `rgba(${60 + rnd() * 70 | 0},${30 + rnd() * 70 | 0},${140 + rnd() * 90 | 0},0.6)`;
-        roundRect(g, bx, by, 68, 38, 4); g.fill();
-        g.strokeStyle = 'rgba(196,181,253,0.28)'; g.lineWidth = 1; g.stroke();
-      }
-      return c;
-    }
-
-    function makeTileCanvas(seed) {
-      const SS = 4, L_S = 64;
-      const c = document.createElement('canvas');
-      c.width = c.height = L_S * SS;
-      const g = c.getContext('2d');
-      g.scale(SS, SS);
-      const rnd = mulberry32(seed);
-      const S = L_S;
-      g.fillStyle = '#120a22'; g.fillRect(0, 0, S, S);
-      g.fillStyle = 'rgba(168,85,247,0.6)'; g.fillRect(0, 0, S, 9);
-      for (let i = 0; i < 5; i++) {
-        g.fillStyle = `rgba(196,181,253,${0.15 + rnd() * 0.28})`;
-        g.fillRect(6, 16 + i * 9, 16 + rnd() * 36, 5);
-      }
-      g.strokeStyle = 'rgba(232,121,249,0.5)'; g.lineWidth = 2;
-      g.strokeRect(1, 1, S - 2, S - 2);
-      return c;
-    }
-
     function makeLabel(text, opts = {}) {
       const color = opts.color || '#c4b5fd';
-      const bg = opts.bg || 'rgba(15,8,32,0.85)';
+      const bg = opts.bg || 'rgba(15,8,32,0.88)';
       const fontSize = opts.fontSize || 52;
+      const lineHeight = opts.lineHeight ?? 1.25;
+      const borderAlpha = opts.borderAlpha ?? 0.45;
       const SS = 3;
+
+      const lines = String(text).split('\n');
+      const n = lines.length;
+
       const mc = document.createElement('canvas');
       const mg = mc.getContext('2d');
       const font = `700 ${fontSize}px "Montserrat", "Segoe UI", system-ui, sans-serif`;
       mg.font = font;
-      const pad = 30;
-      const w = Math.ceil(mg.measureText(text).width) + pad * 2;
-      const h = fontSize + pad * 1.1;
+      const pad = opts.pad ?? 30;
+
+      let maxW = 0;
+      for (const line of lines) {
+        const w = mg.measureText(line).width;
+        if (w > maxW) maxW = w;
+      }
+      const w = Math.ceil(maxW) + pad * 2;
+      const lineH = fontSize * lineHeight;
+      const contentH = lineH * (n - 1) + fontSize;
+      const h = contentH + pad * 1.1;
+
       const c = document.createElement('canvas');
       c.width = w * SS; c.height = h * SS;
       const g = c.getContext('2d');
       g.scale(SS, SS);
       g.font = font;
-      roundRect(g, 2, 2, w - 4, h - 4, 16);
+      roundRect(g, 2, 2, w - 4, h - 4, opts.radius ?? 16);
       g.fillStyle = bg; g.fill();
-      g.strokeStyle = color; g.globalAlpha = 0.45; g.lineWidth = 2.5; g.stroke();
+      g.strokeStyle = color;
+      g.globalAlpha = borderAlpha; g.lineWidth = opts.lineWidth ?? 2.5; g.stroke();
       g.globalAlpha = 1;
-      g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.shadowColor = color; g.shadowBlur = 18;
-      g.fillText(text, w / 2, h / 2 + 2);
-      const tex = new THREE.CanvasTexture(c); tex.anisotropy = MAX_ANISO; tex.needsUpdate = true;
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0 });
+
+      g.fillStyle = color;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.shadowColor = color;
+      g.shadowBlur = opts.shadowBlur ?? 18;
+
+      const firstY = h / 2 + (fontSize - contentH) / 2;
+      for (let i = 0; i < n; i++) {
+        g.fillText(lines[i], w / 2, firstY + lineH * i + 2);
+      }
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = MAX_ANISO;
+      tex.needsUpdate = true;
+
+      const mat = new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0
+      });
       const sp = new THREE.Sprite(mat);
-      const k = 0.0105;
+      const k = opts.scaleK ?? 0.0105;
       sp.scale.set(w * k, h * k, 1);
       sp.renderOrder = 20;
       return sp;
     }
 
-    /* ══════════════════════════════════════════════════════════════
-       SCENE
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ SCENE ══ */
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0a0614);
 
-    // Cámara con aspecto FIJO 1080/1920
     const camera = new THREE.PerspectiveCamera(52, 1080 / 1920, 0.1, 400);
-    camera.position.set(0, 2.5, 30);
+    camera.position.set(0, 0, 22);
 
     const world = new THREE.Group();
     scene.add(world);
 
-    /* Vignette baking (post-process simple, se incluye en la grabación) */
+    /* Vignette */
     const vignetteMat = new THREE.ShaderMaterial({
-      uniforms: { uIntensity: { value: 0.92 } },
+      uniforms: {
+        uIntensity: { value: 0.92 },
+        uTint: { value: new THREE.Color(0x000000) }
+      },
       vertexShader: `
     varying vec2 vUv;
     void main() {
@@ -447,32 +450,30 @@
   `,
       fragmentShader: `
     uniform float uIntensity;
+    uniform vec3 uTint;
     varying vec2 vUv;
     void main() {
       vec2 uv = vUv - 0.5;
       uv.x *= 1.08;
       float d = length(uv);
       float v = smoothstep(0.42, 0.92, d) * uIntensity;
-      gl_FragColor = vec4(0.0, 0.0, 0.0, v);
+      gl_FragColor = vec4(uTint, v);
     }
   `,
-      transparent: true,
-      depthTest: false,
-      depthWrite: false,
-      toneMapped: false
+      transparent: true, depthTest: false, depthWrite: false, toneMapped: false
     });
     const vignetteQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), vignetteMat);
     vignetteQuad.frustumCulled = false;
     vignetteQuad.renderOrder = 9999;
     scene.add(vignetteQuad);
 
-    /* ── Dust ── */
-    const DUST_N = 8000;
+    /* Dust */
+    const DUST_N = 6000;
     {
       const geo = new THREE.BufferGeometry();
       const pos = new Float32Array(DUST_N * 3);
       for (let i = 0; i < DUST_N; i++) {
-        const r = 10 + Math.random() * 30;
+        const r = 8 + Math.random() * 28;
         const th = Math.random() * Math.PI * 2;
         const ph = Math.acos(2 * Math.random() - 1);
         pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
@@ -482,14 +483,57 @@
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
       const mat = new THREE.PointsMaterial({
         size: 0.22, map: circleTex, color: 0x7c3aed, transparent: true,
-        opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+        opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
       });
       const dust = new THREE.Points(geo, mat);
       dust.name = 'dust';
       world.add(dust);
     }
 
-    /* ── Core ── */
+    /* ══ FRAGMENTS ══ */
+    const FRAGMENT_TEXTS = [
+      '1990', 'NYC', '@jdoe', 'photo', 'gmail',
+      '+1···', 'dev', '42', 'cats', '24/7',
+      '5km', 'amazon', 'school', 'cat.jpg', 'USD',
+      'USA', 'likes', 'pizza', 'coffee', 'IT',
+      'B.Sc', '5★', 'review', 'friend', 'work',
+      'follow', 'tag', 'story', 'check-in', 'bio',
+      'CV', '€$', 'sale', 'rss', 'feed'
+    ];
+
+    const fragments = [];
+    FRAGMENT_TEXTS.forEach((txt, i) => {
+      const sp = makeLabel(txt, {
+        color: '#c4b5fd',
+        fontSize: 34,
+        pad: 20,
+        radius: 12,
+        borderAlpha: 0.35,
+        lineWidth: 1.8,
+        shadowBlur: 10,
+        scaleK: 0.0085
+      });
+      const r = 5.5 + Math.random() * 4.5;
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.acos(2 * Math.random() - 1);
+      sp.position.set(
+        r * Math.sin(ph) * Math.cos(th),
+        r * Math.cos(ph),
+        r * Math.sin(ph) * Math.sin(th)
+      );
+      world.add(sp);
+      fragments.push({
+        sprite: sp,
+        basePos: sp.position.clone(),
+        driftPhase: Math.random() * Math.PI * 2,
+        driftFreq: 0.35 + Math.random() * 0.5,
+        driftAmp: 0.25 + Math.random() * 0.35,
+        spinDir: Math.random() > 0.5 ? 1 : -1,
+        startDelay: Math.random() * 0.8
+      });
+    });
+
+    /* ══ CORE ══ */
     const core = new THREE.Group();
     core.scale.setScalar(0.001);
     world.add(core);
@@ -502,7 +546,7 @@
       uniforms: {
         uReveal: { value: 0 },
         uOpacity: { value: 0 },
-        uColor: { value: new THREE.Color(0x8b5cf6) },
+        uColor: { value: new THREE.Color(0xa855f7) },
         uRim: { value: new THREE.Color(0xe879f9) }
       },
       vertexShader: `
@@ -519,15 +563,15 @@
     uniform vec3  uRim;
     varying vec3  vPos;
     void main() {
-      float yNorm = clamp(vPos.y / 1.35, -1.0, 1.0);
-      float threshold = -1.2 + uReveal * 2.4;
-      float reveal = smoothstep(threshold + 0.10, threshold - 0.10, yNorm);
-      float distToFront = abs(yNorm - threshold);
-      float rim = exp(-distToFront * distToFront * 22.0);
-      float revealActive = smoothstep(0.0, 0.08, uReveal) * (1.0 - smoothstep(0.92, 1.0, uReveal));
-      float a = max(reveal * 0.85, rim * revealActive) * uOpacity;
+      float rNorm = length(vPos) / 1.35;
+      float threshold = 1.05 - uReveal * 1.15;
+      float reveal = smoothstep(threshold + 0.10, threshold - 0.10, rNorm);
+      float distToFront = abs(rNorm - threshold);
+      float rim = exp(-distToFront * distToFront * 26.0);
+      float revealActive = smoothstep(0.0, 0.08, uReveal) * (1.0 - smoothstep(0.9, 1.0, uReveal));
+      float a = max(reveal * 0.9, rim * revealActive) * uOpacity;
       if (a < 0.008) discard;
-      vec3 col = uColor + rim * revealActive * uRim * 1.4;
+      vec3 col = uColor + rim * revealActive * uRim * 1.6;
       gl_FragColor = vec4(col, a);
     }
   `,
@@ -536,11 +580,35 @@
     const coreWire = new THREE.Mesh(new THREE.IcosahedronGeometry(1.35, 3), coreWireMat);
     core.add(coreWire);
 
+    const surfaceDotCount = 260;
+    const surfaceDotsGeo = new THREE.BufferGeometry();
+    {
+      const sdPos = new Float32Array(surfaceDotCount * 3);
+      for (let i = 0; i < surfaceDotCount; i++) {
+        const phi = Math.acos(1 - 2 * (i + 0.5) / surfaceDotCount);
+        const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+        const r = 1.42;
+        sdPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        sdPos[i * 3 + 1] = r * Math.cos(phi);
+        sdPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+      }
+      surfaceDotsGeo.setAttribute('position', new THREE.BufferAttribute(sdPos, 3));
+    }
+    const surfaceDotsMat = new THREE.PointsMaterial({
+      size: 0.09, map: circleTex, color: 0xe879f9,
+      transparent: true, opacity: 0,
+      depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+    });
+    const surfaceDots = new THREE.Points(surfaceDotsGeo, surfaceDotsMat);
+    core.add(surfaceDots);
+
     const coreRings = [];
     const ringParams = [
-      { rx: 1.85, tilt: [Math.PI / 2, 0, 0], speed: 0.42, axis: 'z' },
-      { rx: 2.35, tilt: [Math.PI / 2 + 0.55, 0.8, 0], speed: -0.28, axis: 'z' },
-      { rx: 2.85, tilt: [Math.PI / 2 + 1.1, 1.6, 0.3], speed: 0.18, axis: 'x' }
+      { rx: 1.85, tilt: [Math.PI / 2, 0, 0], speed: 0.55, axis: 'z' },
+      { rx: 2.25, tilt: [Math.PI / 2 + 0.55, 0.8, 0], speed: -0.42, axis: 'z' },
+      { rx: 2.65, tilt: [Math.PI / 2 + 1.1, 1.6, 0.3], speed: 0.30, axis: 'x' },
+      { rx: 3.05, tilt: [Math.PI / 2 - 0.7, 2.4, 0.5], speed: -0.25, axis: 'z' },
+      { rx: 3.45, tilt: [Math.PI / 2 + 0.2, 3.1, 1.2], speed: 0.20, axis: 'x' }
     ];
     ringParams.forEach(rp => {
       const rMat = new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0 });
@@ -555,119 +623,88 @@
       blending: THREE.AdditiveBlending, depthWrite: false
     });
     const coreGlow = new THREE.Sprite(coreGlowMat);
-    coreGlow.scale.set(10, 10, 1);
+    coreGlow.scale.set(11, 11, 1);
     core.add(coreGlow);
 
-    const CORE_START = 1.5, CORE_SCALE_DUR = 2.2, CORE_REVEAL_DUR = 2.8;
-    const CORE_INNER_DELAY = 0.5, CORE_INNER_DUR = 1.8;
-    const CORE_RING_DELAY = 1.0, CORE_RING_DUR = 1.4, CORE_RING_STAGGER = 0.30;
-
-    /* ── Panels ── */
-    const panelGroup = new THREE.Group();
-    world.add(panelGroup);
-
-    const PANEL_POSITIONS = [
-      { x: 0.0, y: 6.4, z: 1.4 }, { x: 4.6, y: 3.0, z: -1.0 },
-      { x: 4.4, y: -3.2, z: 1.0 }, { x: 0.0, y: -6.4, z: -1.4 },
-      { x: -4.4, y: -3.2, z: 1.0 }, { x: -4.6, y: 3.0, z: -1.0 }
-    ];
-
-    const panels = [];
-    PANEL_POSITIONS.forEach((p, i) => {
-      const tex = new THREE.CanvasTexture(makeSiteCanvas(101 + i * 17));
-      tex.anisotropy = MAX_ANISO; tex.needsUpdate = true;
-      const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 2.5), mat);
-      mesh.position.set(p.x, p.y, p.z);
-      mesh.lookAt(0, p.y * 0.4, 0);
-      panelGroup.add(mesh);
-      const frameMat = new THREE.LineBasicMaterial({ color: 0xc4b5fd, transparent: true, opacity: 0 });
-      const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(2.16, 2.66)), frameMat);
-      frame.position.copy(mesh.position);
-      frame.quaternion.copy(mesh.quaternion);
-      panelGroup.add(frame);
-      panels.push({
-        mesh, mat, frameMat,
-        basePos: mesh.position.clone(), pos: mesh.position.clone(), quat: mesh.quaternion.clone(),
-        floatPhase: Math.random() * Math.PI * 2,
-        floatAmpY: 0.28 + Math.random() * 0.22,
-        floatAmpX: 0.12 + Math.random() * 0.10,
-        floatFreq: 0.6 + Math.random() * 0.5,
-        framePulsePhase: Math.random() * Math.PI * 2
-      });
-    });
-
-    /* ── Orbs ── */
-    function makeOrb(color) {
+    /* ══ ORBES — simétricos ══ */
+    function makeSmallOrb(color, radius = 0.7) {
       const g = new THREE.Group();
-      const matCore = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
-      const matCage = new THREE.MeshBasicMaterial({ color, wireframe: true, transparent: true, opacity: 0.75 });
-      const matGlow = new THREE.SpriteMaterial({
-        map: glowTex, color, transparent: true, opacity: 0.85,
+      const wireMat = new THREE.MeshBasicMaterial({
+        color, wireframe: true, transparent: true, opacity: 0
+      });
+      const wire = new THREE.Mesh(new THREE.IcosahedronGeometry(radius, 1), wireMat);
+      const glowMat = new THREE.SpriteMaterial({
+        map: glowTex, color, transparent: true, opacity: 0,
         blending: THREE.AdditiveBlending, depthWrite: false
       });
-      const inner = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), matCore);
-      const cage = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 1), matCage);
-      const glow = new THREE.Sprite(matGlow);
-      glow.scale.set(2.4, 2.4, 1);
-      g.add(inner, cage, glow);
-      g.userData = {
-        mats: [matCore, matCage, matGlow], inner, cage, glow,
-        innerSpinX: 1.0 + Math.random() * 1.4, innerSpinY: 1.4 + Math.random() * 1.8,
-        cageSpinX: 1.2 + Math.random() * 1.2, cageSpinY: 2.0 + Math.random() * 1.8,
-        pulsePhase: Math.random() * Math.PI * 2
-      };
+      const glow = new THREE.Sprite(glowMat);
+      glow.scale.set(4.5, 4.5, 1);
+      g.add(wire, glow);
+      g.userData = { wireMat, glowMat, wire };
       return g;
     }
 
-    const mainOrb = makeOrb(0xc4b5fd);
-    mainOrb.position.set(0, 0, 6);
-    world.add(mainOrb);
+    const ORB_X = 2.9;
+    const ORB_Y = -1.8;
 
-    const swarm = new THREE.Group();
-    swarm.visible = false;
-    world.add(swarm);
-    const swarmOrbs = [];
-    const ORBIT_PATTERNS = ['ellipseV', 'ellipseH', 'tilted', 'ellipseV', 'tilted', 'ellipseH', 'tilted', 'ellipseV', 'ellipseH'];
-    for (let i = 0; i < 9; i++) {
-      const o = makeOrb(i % 3 === 0 ? 0xf0abfc : 0xc4b5fd);
-      const a = (i / 9) * Math.PI * 2;
-      o.userData.angle = a;
-      o.userData.radiusX = 6 + Math.random() * 4.5;
-      o.userData.radiusY = 7 + Math.random() * 4.5;
-      o.userData.speed = 0.10 + Math.random() * 0.22;
-      o.userData.yOff = (Math.random() - 0.5) * 3.5;
-      o.userData.zAmp = 2.5 + Math.random() * 3;
-      o.userData.zFreq = 0.5 + Math.random() * 0.7;
-      o.userData.pattern = ORBIT_PATTERNS[i];
-      o.userData.tilt = (Math.random() - 0.5) * 0.8;
-      swarm.add(o);
-      swarmOrbs.push(o);
-    }
+    const benignOrb = makeSmallOrb(0xc4b5fd, 0.75);
+    benignOrb.position.set(-ORB_X, ORB_Y, 0);
+    world.add(benignOrb);
 
-    /* ── Tiles ── */
-    const TILE_N = 1500;
-    const tileTex = new THREE.CanvasTexture(makeTileCanvas(7));
-    tileTex.anisotropy = MAX_ANISO; tileTex.needsUpdate = true;
-    const tileMat = new THREE.MeshBasicMaterial({ map: tileTex, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
-    const tiles = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.0, 1.2), tileMat, TILE_N);
-    {
-      const dummy = new THREE.Object3D();
-      for (let i = 0; i < TILE_N; i++) {
-        const r = 11 + Math.pow(Math.random(), 0.7) * 20;
-        const th = Math.random() * Math.PI * 2;
-        const ph = Math.acos(2 * Math.random() - 1);
-        dummy.position.set(r * Math.sin(ph) * Math.cos(th), r * Math.cos(ph) * 1.05, r * Math.sin(ph) * Math.sin(th));
-        dummy.lookAt(0, 0, 0);
-        dummy.updateMatrix();
-        tiles.setMatrixAt(i, dummy.matrix);
-      }
-      tiles.instanceMatrix.needsUpdate = true;
-    }
-    world.add(tiles);
+    const maliciousOrb = makeSmallOrb(0xff4d6d, 0.75);
+    maliciousOrb.position.set(ORB_X, ORB_Y, 0);
+    world.add(maliciousOrb);
 
-    /* ── Particles ── */
-    const PARTICLE_MAX = 10000;
+    /* ══ LABELS SIMÉTRICAS ══
+       Ambos lados: mismo Y, misma |X|, mismos tiempos de aparición.
+       Y = 3.8, 2.65, 1.5, 0.35  (de arriba a abajo)
+       X = ±2.4
+       ═══════════════════════════════════════════════════════════════ */
+    const LABEL_X = 2.4;
+    const LABEL_Y = [3.8, 2.65, 1.5, 0.35];
+
+    const BENIGN_TEXTS = ['PRICE COMPARE', 'SITE MONITOR', 'RESEARCH', 'ANALYTICS'];
+    const MAL_TEXTS = ['MASS DATA', 'CONTENT COPY', 'PHISHING', 'DISINFORMATION'];
+    const LABEL_TIMES = [14.2, 14.9, 15.6, 16.3];
+
+    const benignLabels = BENIGN_TEXTS.map((txt, i) => {
+      const sp = makeLabel(txt, {
+        color: '#c4b5fd', fontSize: 28, pad: 20, radius: 14,
+        borderAlpha: 0.5, shadowBlur: 14, scaleK: 0.0095
+      });
+      sp.position.set(-LABEL_X, LABEL_Y[i], 0.5);
+      world.add(sp);
+      return { text: txt, t: LABEL_TIMES[i], sp, idx: i, baseY: LABEL_Y[i] };
+    });
+
+    const maliciousLabels = MAL_TEXTS.map((txt, i) => {
+      const sp = makeLabel(txt, {
+        color: '#ff6b6b', fontSize: 28, pad: 20, radius: 14,
+        borderAlpha: 0.55, shadowBlur: 16, scaleK: 0.0095
+      });
+      sp.position.set(LABEL_X, LABEL_Y[i], 0.5);
+      world.add(sp);
+      return { text: txt, t: LABEL_TIMES[i], sp, idx: i, baseY: LABEL_Y[i] };
+    });
+
+    /* ── Closing label centrado abajo ── */
+    const closingLabel = makeLabel('SAME TOOL.\nDIFFERENT INTENT.', {
+      color: '#ff8fa3',
+      bg: 'rgba(30,5,15,0.95)',
+      fontSize: 38,
+      lineHeight: 1.3,
+      pad: 30,
+      radius: 20,
+      borderAlpha: 0.55,
+      shadowBlur: 22
+    });
+    closingLabel.position.set(0, -4.8, 3);
+    closingLabel.material.opacity = 0;
+    closingLabel.visible = false;
+    world.add(closingLabel);
+
+    /* ══ PARTÍCULAS ══ */
+    const PARTICLE_MAX = 8000;
     const pGeo = new THREE.BufferGeometry();
     const posArr = new Float32Array(PARTICLE_MAX * 3);
     const colArr = new Float32Array(PARTICLE_MAX * 3);
@@ -716,20 +753,23 @@
     const particles = [];
     for (let i = 0; i < PARTICLE_MAX; i++) {
       particles.push({
-        active: false, t: 0, dur: 1, size: 0.25, alpha: 0,
+        active: false, t: 0, dur: 1, size: 0.25,
         from: new THREE.Vector3(), to: new THREE.Vector3(),
         ctrl: new THREE.Vector3(), color: new THREE.Color(),
         wobble: 0, wobbleFreq: 0, wobblePhase: 0
       });
     }
     let pCursor = 0;
+
     const _v1 = new THREE.Vector3();
     const _white = new THREE.Color(0xffffff);
-    const PARTICLE_PALETTE = [0xf0abfc, 0x8b5cf6, 0xc4b5fd, 0xe879f9, 0xa855f7, 0xd8b4fe];
+
+    const BENIGN_PALETTE = [0xc4b5fd, 0xa78bfa, 0x8b5cf6, 0xd8b4fe, 0xe879f9];
+    const MALICIOUS_PALETTE = [0xff4d6d, 0xff2e63, 0xc9184a, 0xff5a5a, 0xff8b8b];
 
     function spawnParticle(from, to, colorHex) {
       let slot = -1;
-      for (let i = 0; i < 260; i++) {
+      for (let i = 0; i < 300; i++) {
         const idx = (pCursor + i) % PARTICLE_MAX;
         if (!particles[idx].active) { slot = idx; break; }
       }
@@ -742,24 +782,15 @@
       _v1.randomDirection().multiplyScalar(1.2 + Math.random() * 3.4);
       p.ctrl.copy(from).add(to).multiplyScalar(0.5).add(_v1);
       p.t = 0;
-      p.dur = 0.75 + Math.random() * 1.05;
-      p.size = 0.14 + Math.random() * 0.38;
+      p.dur = 0.55 + Math.random() * 0.75;
+      p.size = 0.14 + Math.random() * 0.36;
       p.color.setHex(colorHex).lerp(_white, Math.random() * 0.4);
       p.wobble = 0.15 + Math.random() * 0.45;
       p.wobbleFreq = 6 + Math.random() * 8;
       p.wobblePhase = Math.random() * Math.PI * 2;
     }
 
-    function burst(from, count, colorHex, spread) {
-      for (let i = 0; i < count; i++) {
-        _v1.randomDirection().multiplyScalar(spread * Math.random());
-        const src = from.clone().add(_v1);
-        spawnParticle(src, new THREE.Vector3(0, 0, 0), colorHex);
-      }
-    }
-
-    /* ── Rings ── */
-    const ringGeo = new THREE.RingGeometry(0.86, 1.0, 256);
+    const ringGeo = new THREE.RingGeometry(0.86, 1.0, 200);
     const ringFX = [];
     function spawnRing(pos, quat, color) {
       const mat = new THREE.MeshBasicMaterial({
@@ -773,57 +804,24 @@
       world.add(m);
       ringFX.push({
         mesh: m, life: 0,
-        dur: 0.75 + Math.random() * 0.6,
-        spin: (Math.random() - 0.5) * 2.4,
-        maxScale: 3.0 + Math.random() * 1.4
+        dur: 0.6 + Math.random() * 0.5,
+        spin: (Math.random() - 0.5) * 2.8,
+        maxScale: 3.5 + Math.random() * 1.5
       });
     }
 
-    /* ── Labels ── */
-    const formatLabels = [
-      {
-        sp: makeLabel('{ } JSON', { color: '#f0abfc', fontSize: 60 }),
-        pos: new THREE.Vector3(3.2, 3.0, 1.5), t: 35.4, floatAmp: 0.24, floatFreq: 1.1, floatPhase: 0.0
-      },
-      {
-        sp: makeLabel('CSV', { color: '#c4b5fd', fontSize: 60 }),
-        pos: new THREE.Vector3(-3.2, 0.4, 1.5), t: 36.8, floatAmp: 0.30, floatFreq: 0.85, floatPhase: 1.8
-      },
-      {
-        sp: makeLabel('DATABASE', { color: '#a78bfa', fontSize: 60 }),
-        pos: new THREE.Vector3(3.2, -2.4, 1.5), t: 38.2, floatAmp: 0.20, floatFreq: 1.35, floatPhase: 3.4
-      }
-    ];
-    formatLabels.forEach(f => { f.sp.position.copy(f.pos); world.add(f.sp); });
-
-    const CATEGORIES = [
-      { text: 'NAMES', color: '#c4b5fd', t: 51.2, angle: 0.0, y: 2.2, radius: 4.3, speed: 0.14, bobAmp: 0.42, bobFreq: 0.9 },
-      { text: 'JOBS', color: '#f0abfc', t: 52.6, angle: 1.6, y: -1.0, radius: 4.9, speed: -0.11, bobAmp: 0.55, bobFreq: 1.15 },
-      { text: 'PHOTOS', color: '#e879f9', t: 54.0, angle: 3.2, y: 2.6, radius: 4.1, speed: 0.09, bobAmp: 0.36, bobFreq: 0.75 },
-      { text: 'LOCATIONS', color: '#a78bfa', t: 55.4, angle: 4.7, y: -2.0, radius: 4.7, speed: -0.16, bobAmp: 0.48, bobFreq: 1.05 }
-    ];
-    const catLabels = CATEGORIES.map(c => {
-      const sp = makeLabel(c.text, { color: c.color, fontSize: 54 });
-      world.add(sp);
-      return { ...c, sp };
-    });
-
-    /* ══════════════════════════════════════════════════════════════
-       TIMING / CAMERA
-       ══════════════════════════════════════════════════════════════ */
-    const TOTAL = 72;
+    /* ══ TIMING / CAMERA ══ */
+    const TOTAL = 29;
 
     const CAM_KEYS = [
-      { t: 0, p: [0, 2.5, 30], l: [0, 0.5, 0] },
-      { t: 12, p: [0, 3.0, 26], l: [0, 0.5, 0] },
-      { t: 20, p: [2.5, 4.5, 20], l: [0, 0.4, 0] },
-      { t: 30, p: [-2.5, 3.5, 20], l: [0, 0.4, 0] },
-      { t: 38, p: [0, 5.5, 24], l: [0, 0.0, 0] },
-      { t: 45, p: [0, 8.0, 48], l: [0, 0.0, 0] },
-      { t: 51, p: [0, 3.5, 19], l: [0, 0.3, 0] },
-      { t: 59, p: [2.2, 2.5, 19], l: [0, 0.3, 0] },
-      { t: 66, p: [-2.2, 2.0, 19], l: [0, 0.3, 0] },
-      { t: 72, p: [0, 1.5, 21], l: [0, 0.3, 0] }
+      { t: 0, p: [0, 0, 22], l: [0, 0, 0] },
+      { t: 4, p: [0, 0, 15], l: [0, 0, 0] },
+      { t: 9, p: [0, 1, 11], l: [0, 0, 0] },
+      { t: 13, p: [0, 0, 17], l: [0, -0.3, 0] },
+      { t: 17, p: [0, 0, 16], l: [0, -0.5, 0] },
+      { t: 21, p: [0, 0, 14.5], l: [0, -0.6, 0] },
+      { t: 25, p: [0, 0, 13.5], l: [0, -0.7, 0] },
+      { t: 29, p: [0, 0, 13], l: [0, -0.8, 0] }
     ];
 
     const _camP = new THREE.Vector3();
@@ -836,160 +834,274 @@
       const b = CAM_KEYS[Math.min(i + 1, CAM_KEYS.length - 1)];
       const span = Math.max(0.001, b.t - a.t);
       const k = smoothstep(0, 1, clamp((t - a.t) / span, 0, 1));
-      _camP.set(
-        a.p[0] + (b.p[0] - a.p[0]) * k,
-        a.p[1] + (b.p[1] - a.p[1]) * k,
-        a.p[2] + (b.p[2] - a.p[2]) * k
-      );
-      _camL.set(
-        a.l[0] + (b.l[0] - a.l[0]) * k,
-        a.l[1] + (b.l[1] - a.l[1]) * k,
-        a.l[2] + (b.l[2] - a.l[2]) * k
-      );
+      _camP.set(a.p[0] + (b.p[0] - a.p[0]) * k, a.p[1] + (b.p[1] - a.p[1]) * k, a.p[2] + (b.p[2] - a.p[2]) * k);
+      _camL.set(a.l[0] + (b.l[0] - a.l[0]) * k, a.l[1] + (b.l[1] - a.l[1]) * k, a.l[2] + (b.l[2] - a.l[2]) * k);
     }
 
-    /* ══════════════════════════════════════════════════════════════
-       STATE
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ AUDIO SCHEDULE ══ */
+    const AUDIO_EVENTS = [
+      { at: 4.5, type: 'whoosh', intensity: 0.14 },
+      { at: 5.3, type: 'whoosh', intensity: 0.16 },
+      { at: 6.1, type: 'whoosh', intensity: 0.18 },
+      { at: 7.0, type: 'whoosh', intensity: 0.20 },
+      { at: 8.0, type: 'whoosh', intensity: 0.22 },
+      { at: 9.0, type: 'blip', intensity: 0.20, freq: 600 },
+      { at: 9.35, type: 'blip', intensity: 0.20, freq: 700 },
+      { at: 9.7, type: 'blip', intensity: 0.20, freq: 800 },
+      { at: 10.05, type: 'blip', intensity: 0.20, freq: 900 },
+      { at: 10.4, type: 'blip', intensity: 0.20, freq: 1000 },
+      { at: 11.2, type: 'boom', intensity: 0.30 },
+      { at: 13.2, type: 'boom', intensity: 0.42 },
+      { at: 14.2, type: 'blip', intensity: 0.15, freq: 1000 },
+      { at: 14.2, type: 'blip', intensity: 0.15, freq: 1200 },
+      { at: 14.9, type: 'blip', intensity: 0.15, freq: 1000 },
+      { at: 14.9, type: 'blip', intensity: 0.15, freq: 1200 },
+      { at: 15.6, type: 'blip', intensity: 0.15, freq: 1000 },
+      { at: 15.6, type: 'blip', intensity: 0.15, freq: 1200 },
+      { at: 16.3, type: 'blip', intensity: 0.18, freq: 1000 },
+      { at: 16.3, type: 'blip', intensity: 0.18, freq: 1400 },
+      { at: 17.5, type: 'boom', intensity: 0.48 },
+      { at: 19.0, type: 'drone', intensity: 0.07, duration: 7.5 },
+      { at: 19.5, type: 'glitch', intensity: 0.22 },
+      { at: 20.5, type: 'glitch', intensity: 0.25 },
+      { at: 21.5, type: 'glitch', intensity: 0.28 },
+      { at: 22.5, type: 'glitch', intensity: 0.31 },
+      { at: 23.5, type: 'glitch', intensity: 0.34 },
+      { at: 24.5, type: 'glitch', intensity: 0.37 },
+      { at: 25.5, type: 'glitch', intensity: 0.40 },
+      { at: 26.2, type: 'boom', intensity: 0.58 },
+      { at: 27.8, type: 'boom', intensity: 0.38 }
+    ];
+    const firedAudioEvents = new Set();
+
+    /* ══ STATE ══ */
     let elapsed = 0;
     let playing = true;
-    let nextScrape = 16.6;
     let corePulseVal = 0;
-    let corePulseSlow = 0;
     let collected = 0;
-    let scaleSpawnAcc = 0;
-    const pending = [];
-    const orbTarget = new THREE.Vector3(0, 0, 6);
-    const _tmpM = new THREE.Matrix4();
+    let particleAcc = 0;
     const _tmpV = new THREE.Vector3();
 
-    function later(delay, fn) { pending.push({ at: elapsed + delay, fn }); }
-
-    function doScrape() {
-      const p = panels[Math.floor(Math.random() * panels.length)];
-      orbTarget.copy(p.pos).multiplyScalar(0.68);
-      const origin = p.pos.clone().multiplyScalar(0.92);
-      spawnRing(p.pos, p.quat, 0xc4b5fd);
-      later(0.5, () => burst(origin, 18, 0xc4b5fd, 0.45));
-      // Vórtice oscuro cuando el módulo blanco viaja
-      triggerVortex(0.38, 0.85 + Math.random() * 0.15);
-    }
-
-    /* ══════════════════════════════════════════════════════════════
-       UPDATE
-       ══════════════════════════════════════════════════════════════ */
-    function setGroupOpacity(group, o) {
-      group.traverse(obj => {
-        if (obj.material && obj.material.transparent) obj.material.opacity = o;
-      });
-    }
-
+    /* ══ UPDATE ══ */
     function update(t, dt) {
       cameraAt(t);
-      const shake = 0.10;
+      const shake = 0.08;
       camera.position.set(
-        _camP.x + Math.sin(t * 0.37) * shake,
-        _camP.y + Math.sin(t * 0.53 + 1.3) * shake * 0.8,
-        _camP.z + Math.cos(t * 0.29) * shake * 0.6
+        _camP.x + Math.sin(t * 0.45) * shake,
+        _camP.y + Math.sin(t * 0.61 + 1.3) * shake * 0.8,
+        _camP.z + Math.cos(t * 0.33) * shake * 0.6
       );
       camera.lookAt(_camL.x, _camL.y, _camL.z);
 
-      for (let i = pending.length - 1; i >= 0; i--) {
-        if (t >= pending[i].at) {
-          const fn = pending[i].fn;
-          pending.splice(i, 1);
-          fn();
+      AUDIO_EVENTS.forEach((e, idx) => {
+        if (t >= e.at && !firedAudioEvents.has(idx)) {
+          firedAudioEvents.add(idx);
+          triggerAudio(e.type, e);
         }
-      }
+      });
 
       const dust = world.getObjectByName('dust');
       if (dust) {
-        dust.rotation.y = t * 0.018 + Math.sin(t * 0.07) * 0.25;
-        dust.rotation.x = Math.sin(t * 0.05) * 0.08;
-        dust.rotation.z = Math.cos(t * 0.04) * 0.06;
+        dust.rotation.y = t * 0.03 + Math.sin(t * 0.1) * 0.2;
+        dust.rotation.x = Math.sin(t * 0.07) * 0.06;
       }
 
-      // Core reveal
-      const scaleT = clamp((t - CORE_START) / CORE_SCALE_DUR, 0, 1);
-      const scaleEase = easeOutCubic(scaleT);
-      const revealT = clamp((t - CORE_START) / CORE_REVEAL_DUR, 0, 1);
-      coreWireMat.uniforms.uReveal.value = smoothstep(0, 1, revealT);
-      const wireFade = smoothstep(CORE_START, CORE_START + 1.4, t);
-      const wireBreath = 0.9 + 0.1 * Math.sin(t * 1.2);
-      coreWireMat.uniforms.uOpacity.value = wireFade * 0.75 * wireBreath;
-      const innerT = clamp((t - CORE_START - CORE_INNER_DELAY) / CORE_INNER_DUR, 0, 1);
-      coreInnerMat.opacity = easeOutCubic(innerT) * 0.95;
+      const darkK = smoothstep(19, 26, t);
+      const bg = new THREE.Color(0x0a0614).lerp(new THREE.Color(0x1a0308), darkK);
+      scene.background = bg;
+      vignetteMat.uniforms.uTint.value.setRGB(darkK * 0.15, 0, 0);
+      vignetteMat.uniforms.uIntensity.value = 0.92 + darkK * 0.05;
+
+      /* ═══ Fragmentos + convergencia ═══ */
+      const convergeK = smoothstep(4, 8.5, t);
+      fragments.forEach(f => {
+        const appearK = smoothstep(f.startDelay, f.startDelay + 1.0, t);
+        const drift = Math.sin(t * f.driftFreq + f.driftPhase) * f.driftAmp;
+        const driftY = Math.cos(t * f.driftFreq * 0.8 + f.driftPhase) * f.driftAmp;
+        const targetPos = _tmpV.set(0, 0, 0);
+        const currentPos = f.basePos.clone().lerp(targetPos, convergeK);
+        currentPos.x += drift * (1 - convergeK);
+        currentPos.y += driftY * (1 - convergeK);
+        f.sprite.position.copy(currentPos);
+        const s = (1 - convergeK * 0.85) * appearK;
+        f.sprite.scale.set(2.4 * s, 0.75 * s, 1);
+        f.sprite.material.opacity = appearK * (1 - convergeK) * 0.85;
+        f.sprite.material.rotation = Math.sin(t * 0.3 + f.driftPhase) * 0.05 * f.spinDir;
+      });
+
+      /* ═══ CORE — se disuelve más rápido para no tapar el centro ═══ */
+      const coreScale = (0.001 + easeOutCubic(clamp((t - 4) / 4.5, 0, 1)) * 0.999);
+      const coreFade = 1 - smoothstep(12.5, 16, t);       // ← fade-out temprano
+      const coreFadeStrong = coreFade * coreFade;          // ← para el inner
+
+      corePulseVal *= Math.exp(-5.0 * dt);
+      const pulse = 1 + corePulseVal * 0.35;
+      core.scale.setScalar(coreScale * pulse);
+      core.visible = coreScale > 0.005 && coreFade > 0.005;
+
+      const revealK = smoothstep(4.5, 9, t);
+      coreWireMat.uniforms.uReveal.value = revealK;
+      const wireOp = smoothstep(4.5, 6.0, t) * 0.75 * coreFade;
+      const wireBreath = 0.9 + 0.1 * Math.sin(t * 1.6);
+      coreWireMat.uniforms.uOpacity.value = wireOp * wireBreath;
+
+      const innerK = smoothstep(6.5, 9.5, t);
+      coreInnerMat.opacity = innerK * 0.95 * coreFadeStrong;
+
+      const dotsK = smoothstep(8.5, 11, t);
+      surfaceDotsMat.opacity = dotsK * 0.9 * coreFade;
+      surfaceDots.rotation.y += dt * 0.15;
+
       coreRings.forEach((r, i) => {
-        const d = CORE_START + CORE_RING_DELAY + i * CORE_RING_STAGGER;
-        const rt = clamp((t - d) / CORE_RING_DUR, 0, 1);
+        const d = 9 + i * 0.35;
+        const rt = clamp((t - d) / 0.9, 0, 1);
         const e = easeOutCubic(rt);
-        r.mat.opacity = e * 0.35;
+        r.mat.opacity = e * 0.4 * coreFade;
         r.mesh.scale.setScalar(0.001 + e * 0.999);
       });
-      const glowT = smoothstep(CORE_START, CORE_START + 1.8, t);
-      coreGlowMat.opacity = glowT * 0.35 + corePulseVal * 0.5;
 
-      corePulseVal *= Math.exp(-4.2 * dt);
-      corePulseSlow = 0.5 + 0.5 * Math.sin(t * 1.4);
-      const breath = 1 + Math.sin(t * 0.9) * 0.012;
-      const coreScale =
-        (0.001 + scaleEase * 0.999) *
-        (1 + Math.min(1.0, collected * 0.0009)) *
-        (1 + corePulseVal * 0.35) *
-        (1 + corePulseSlow * 0.05) * breath;
-      core.scale.setScalar(coreScale);
-      core.visible = coreScale > 0.005;
+      coreGlowMat.opacity =
+        (smoothstep(5, 8, t) * 0.35 + corePulseVal * 0.5) * coreFade;
+      coreGlowMat.color.setHex(0xa855f7).lerp(new THREE.Color(0xc9184a), darkK);
 
-      const entranceSpin = (1 - scaleEase) * Math.PI * 1.5;
-      coreWire.rotation.y = t * 0.22 + entranceSpin;
-      coreWire.rotation.x = Math.sin(t * 0.30) * 0.20 + (1 - scaleEase) * 0.55;
-      coreWire.rotation.z = Math.sin(t * 0.15) * 0.06;
-      coreInner.rotation.y -= dt * 0.14;
-      coreInner.rotation.z += dt * 0.05;
+      const entranceSpin = (1 - easeOutCubic(clamp((t - 4) / 4.5, 0, 1))) * Math.PI * 1.5;
+      coreWire.rotation.y = t * 0.35 + entranceSpin;
+      coreWire.rotation.x = Math.sin(t * 0.4) * 0.22;
+      coreWire.rotation.z = Math.sin(t * 0.18) * 0.08;
+      coreInner.rotation.y -= dt * 0.18;
+      coreInner.rotation.z += dt * 0.06;
+
       coreRings.forEach(r => {
         if (r.axis === 'z') r.mesh.rotation.z += dt * r.speed;
         else r.mesh.rotation.x += dt * r.speed;
-        r.mesh.rotation.y += Math.sin(t * 0.3 + r.speed) * 0.002;
+        r.mesh.rotation.y += Math.sin(t * 0.4 + r.speed) * 0.003;
       });
 
-      // Panels
-      const panelOpacity = smoothstep(13, 18, t) * (1 - smoothstep(42, 48, t));
-      panels.forEach((p, i) => {
-        const fy = Math.sin(t * p.floatFreq + p.floatPhase) * p.floatAmpY;
-        const fx = Math.cos(t * p.floatFreq * 0.7 + p.floatPhase) * p.floatAmpX;
-        p.mesh.position.x = p.basePos.x + fx;
-        p.mesh.position.y = p.basePos.y + fy;
-        p.pos.copy(p.mesh.position);
-        p.mat.opacity = panelOpacity * (0.85 + 0.15 * Math.sin(t * 1.6 + p.framePulsePhase));
-        p.frameMat.opacity = panelOpacity * 0.5 * (0.55 + 0.45 * Math.sin(t * 2 + p.framePulsePhase));
-        p.mesh.lookAt(0, p.mesh.position.y * 0.4, 0);
-        const frame = panelGroup.children[i * 2 + 1];
-        if (frame) { frame.position.copy(p.mesh.position); frame.quaternion.copy(p.mesh.quaternion); }
+      /* ═══ Split — orbes simétricos ═══ */
+      const splitK = smoothstep(12.5, 17, t);
+      const benignAppear = splitK;
+      const maliciousAppear = smoothstep(13, 17.5, t);
+
+      const benignShrink = smoothstep(19, 25, t);
+      const malGrow = smoothstep(19, 24, t);
+
+      // ← NUEVO: migración al centro en la fase oscura
+      const centerK = smoothstep(20, 26, t);
+
+      // Orbe benigno: sale hacia -ORB_X y se desvanece (queda ahí)
+      const benX = -ORB_X * benignAppear;
+      benignOrb.position.set(benX, ORB_Y, 0);
+
+      // Orbe malicioso: sale hacia +ORB_X y LUEGO vuelve al centro
+      const malX = ORB_X * maliciousAppear * (1 - centerK);
+      const malY = ORB_Y + centerK * 0.4;  // sube ligeramente al centrarse
+      maliciousOrb.position.set(malX, malY, 0);
+
+      benignOrb.scale.setScalar(benignAppear * (1 - benignShrink * 0.95));
+      maliciousOrb.scale.setScalar(maliciousAppear * (1 + malGrow * 0.55));
+
+      const bWireOp = benignAppear * (1 - benignShrink) * 0.85;
+      const mWireOp = maliciousAppear * (0.85 + malGrow * 0.15);
+      benignOrb.userData.wireMat.opacity = bWireOp;
+      maliciousOrb.userData.wireMat.opacity = mWireOp;
+      benignOrb.userData.glowMat.opacity = benignAppear * (1 - benignShrink) * (0.65 + 0.3 * Math.sin(t * 7));
+      maliciousOrb.userData.glowMat.opacity = maliciousAppear * (0.7 + 0.35 * Math.sin(t * 6 + 1));
+
+      benignOrb.userData.wire.rotation.y += dt * 1.2;
+      benignOrb.userData.wire.rotation.x += dt * 0.8;
+      maliciousOrb.userData.wire.rotation.y -= dt * 1.6;
+      maliciousOrb.userData.wire.rotation.x += dt * 1.0;
+
+      /* ── Labels benign (izquierda, se van) ── */
+      benignLabels.forEach(l => {
+        const o = smoothstep(l.t, l.t + 0.6, t) * (1 - smoothstep(20, 23, t));
+        l.sp.material.opacity = o;
+        l.sp.position.x = -LABEL_X - benignShrink * 3.0;
+        l.sp.position.y = l.baseY + Math.sin(t * 1.2 + l.idx) * 0.05;
+        l.sp.visible = o > 0.01;
       });
 
-      // Main scraper
-      const orbVisible = smoothstep(15, 17, t) * (1 - smoothstep(42, 47, t));
-      mainOrb.visible = orbVisible > 0.01;
-      setGroupOpacity(mainOrb, orbVisible);
-      if (orbVisible > 0.01) {
-        const k = 1 - Math.exp(-3.4 * dt);
-        const zigX = Math.sin(t * 7.5) * 0.08;
-        const zigY = Math.cos(t * 6.3) * 0.08;
-        const target = _tmpV.set(orbTarget.x + zigX, orbTarget.y + zigY, orbTarget.z);
-        mainOrb.position.lerp(target, k);
-        mainOrb.userData.cage.rotation.y += dt * mainOrb.userData.cageSpinY;
-        mainOrb.userData.cage.rotation.x += dt * mainOrb.userData.cageSpinX;
-        mainOrb.userData.inner.rotation.y += dt * mainOrb.userData.innerSpinY;
-        mainOrb.userData.inner.rotation.x += dt * mainOrb.userData.innerSpinX;
-        mainOrb.userData.glow.material.opacity = orbVisible * (0.55 + 0.4 * Math.sin(t * 6 + mainOrb.userData.pulsePhase));
+      /* ── Labels malicious (migran al CENTRO) ── */
+      maliciousLabels.forEach(l => {
+        const o = smoothstep(l.t, l.t + 0.6, t);
+        l.sp.material.opacity = o;
+        // ← x migra de +LABEL_X → 0 conforme centerK sube
+        l.sp.position.x = LABEL_X * (1 - centerK);
+        l.sp.position.y = l.baseY + Math.sin(t * 1.2 + l.idx) * 0.05;
+        l.sp.visible = o > 0.01;
+      });
+
+      /* ═══ Partículas ═══ */
+      if (t > 4 && t < 9.5) {
+        particleAcc += dt * (80 + smoothstep(5, 8, t) * 100);
+        let guard = 0;
+        while (particleAcc >= 1 && guard < 50) {
+          particleAcc -= 1; guard++;
+          _v1.randomDirection().multiplyScalar(5 + Math.random() * 5);
+          const src = _v1.clone();
+          spawnParticle(src, new THREE.Vector3(0, 0, 0),
+            BENIGN_PALETTE[Math.floor(Math.random() * BENIGN_PALETTE.length)]);
+        }
       }
 
-      if (t > 16.6 && t < 40 && t >= nextScrape) {
-        doScrape();
-        nextScrape += 1.85 + Math.random() * 0.5;
+      if (t > 12.5 && t < 19) {
+        particleAcc += dt * (100 + smoothstep(14, 17, t) * 130);
+        let guard = 0;
+        while (particleAcc >= 1 && guard < 60) {
+          particleAcc -= 1; guard++;
+          const toBenign = Math.random() > 0.5;
+          const target = toBenign
+            ? benignOrb.position.clone()
+            : maliciousOrb.position.clone();
+          _v1.randomDirection().multiplyScalar(0.5 + Math.random() * 1.5);
+          const src = new THREE.Vector3(0, 0, 0).add(_v1);
+          const palette = toBenign ? BENIGN_PALETTE : MALICIOUS_PALETTE;
+          spawnParticle(src, target,
+            palette[Math.floor(Math.random() * palette.length)]);
+        }
       }
 
-      // Rings
+      if (t > 19 && t < 27) {
+        particleAcc += dt * 140;
+        let guard = 0;
+        while (particleAcc >= 1 && guard < 60) {
+          particleAcc -= 1; guard++;
+          _v1.randomDirection().multiplyScalar(3 + Math.random() * 3);
+          const src = _v1.clone();
+          spawnParticle(src, maliciousOrb.position.clone(),
+            MALICIOUS_PALETTE[Math.floor(Math.random() * MALICIOUS_PALETTE.length)]);
+        }
+      }
+
+      for (let i = 0; i < PARTICLE_MAX; i++) {
+        const p = particles[i];
+        if (!p.active) { alphaArr[i] = 0; continue; }
+        p.t += dt / p.dur;
+        if (p.t >= 1) {
+          p.active = false; alphaArr[i] = 0; collected++;
+          corePulseVal = Math.min(1, corePulseVal + 0.025);
+          continue;
+        }
+        const tt = p.t, mt = 1 - tt;
+        let x = mt * mt * p.from.x + 2 * mt * tt * p.ctrl.x + tt * tt * p.to.x;
+        let y = mt * mt * p.from.y + 2 * mt * tt * p.ctrl.y + tt * tt * p.to.y;
+        let z = mt * mt * p.from.z + 2 * mt * tt * p.ctrl.z + tt * tt * p.to.z;
+        const w = Math.sin(tt * p.wobbleFreq + p.wobblePhase) * p.wobble * Math.sin(tt * Math.PI);
+        x += w * 0.6; y += w * 0.9;
+        posArr[i * 3] = x;
+        posArr[i * 3 + 1] = y;
+        posArr[i * 3 + 2] = z;
+        colArr[i * 3] = p.color.r;
+        colArr[i * 3 + 1] = p.color.g;
+        colArr[i * 3 + 2] = p.color.b;
+        sizeArr[i] = p.size;
+        alphaArr[i] = Math.min(1, tt * 6) * Math.min(1, (1 - tt) * 3.2) * 0.95;
+      }
+      pGeo.attributes.position.needsUpdate = true;
+      pGeo.attributes.aColor.needsUpdate = true;
+      pGeo.attributes.aSize.needsUpdate = true;
+      pGeo.attributes.aAlpha.needsUpdate = true;
+
       for (let i = ringFX.length - 1; i >= 0; i--) {
         const r = ringFX[i];
         r.life += dt / r.dur;
@@ -1002,114 +1114,13 @@
         r.mesh.material.opacity = 0.9 * (1 - r.life) * (1 - r.life);
       }
 
-      // Tiles
-      const tileOpacity = smoothstep(40, 46, t) * (1 - smoothstep(64, 71, t));
-      tileMat.opacity = tileOpacity * 0.72;
-      tiles.visible = tileOpacity > 0.005;
-      if (tiles.visible) {
-        tiles.rotation.y = t * 0.012;
-        tiles.rotation.x = Math.sin(t * 0.15) * 0.05;
-      }
-
-      // Swarm
-      const swarmOpacity = smoothstep(41, 47, t) * (1 - smoothstep(64, 70, t));
-      swarm.visible = swarmOpacity > 0.01;
-      if (swarm.visible) {
-        swarmOrbs.forEach((o, i) => {
-          o.userData.angle += dt * o.userData.speed;
-          const a = o.userData.angle;
-          const rx = o.userData.radiusX, ry = o.userData.radiusY;
-          const zA = o.userData.zAmp, zF = o.userData.zFreq;
-          let px, py, pz;
-          switch (o.userData.pattern) {
-            case 'ellipseV':
-              px = Math.cos(a) * rx * 0.7; py = Math.sin(a) * ry; pz = Math.sin(a * zF) * zA * 0.5; break;
-            case 'ellipseH':
-              px = Math.cos(a) * rx; py = Math.sin(a) * ry * 0.55; pz = Math.cos(a * zF) * zA * 0.5; break;
-            case 'tilted':
-              px = Math.cos(a) * rx; py = Math.sin(a) * ry + Math.cos(a + o.userData.tilt) * 1.5; pz = Math.sin(a + o.userData.tilt) * zA; break;
-          }
-          o.position.set(px, py + o.userData.yOff, pz);
-          o.userData.cage.rotation.y += dt * o.userData.cageSpinY;
-          o.userData.cage.rotation.z += dt * o.userData.cageSpinX;
-          o.userData.inner.rotation.y += dt * o.userData.innerSpinY;
-          o.userData.glow.material.opacity = swarmOpacity * (0.5 + 0.4 * Math.sin(t * 5 + o.userData.pulsePhase));
-          o.userData.mats[0].opacity = swarmOpacity;
-          o.userData.mats[1].opacity = swarmOpacity * 0.75;
-        });
-      }
-
-      // Massive data flow
-      if (t > 41 && t < 63.5) {
-        const rate = 60 + smoothstep(44, 52, t) * 130;
-        scaleSpawnAcc += dt * rate;
-        let guard = 0;
-        while (scaleSpawnAcc >= 1 && guard < 60) {
-          scaleSpawnAcc -= 1; guard++;
-          const idx = Math.floor(Math.random() * TILE_N);
-          tiles.getMatrixAt(idx, _tmpM);
-          _tmpV.setFromMatrixPosition(_tmpM);
-          spawnParticle(_tmpV, new THREE.Vector3(0, 0, 0),
-            PARTICLE_PALETTE[Math.floor(Math.random() * PARTICLE_PALETTE.length)]);
-        }
-      }
-
-      // Particles
-      for (let i = 0; i < PARTICLE_MAX; i++) {
-        const p = particles[i];
-        if (!p.active) { alphaArr[i] = 0; continue; }
-        p.t += dt / p.dur;
-        if (p.t >= 1) {
-          p.active = false; alphaArr[i] = 0; collected++;
-          corePulseVal = Math.min(1, corePulseVal + 0.035);
-          continue;
-        }
-        const tt = p.t, mt = 1 - tt;
-        let x = mt * mt * p.from.x + 2 * mt * tt * p.ctrl.x + tt * tt * p.to.x;
-        let y = mt * mt * p.from.y + 2 * mt * tt * p.ctrl.y + tt * tt * p.to.y;
-        let z = mt * mt * p.from.z + 2 * mt * tt * p.ctrl.z + tt * tt * p.to.z;
-        const w = Math.sin(tt * p.wobbleFreq + p.wobblePhase) * p.wobble * Math.sin(tt * Math.PI);
-        x += w * 0.6; y += w * 0.9;
-        posArr[i * 3] = x; posArr[i * 3 + 1] = y; posArr[i * 3 + 2] = z;
-        colArr[i * 3] = p.color.r; colArr[i * 3 + 1] = p.color.g; colArr[i * 3 + 2] = p.color.b;
-        sizeArr[i] = p.size;
-        alphaArr[i] = Math.min(1, tt * 6) * Math.min(1, (1 - tt) * 3.2) * 0.95;
-      }
-      pGeo.attributes.position.needsUpdate = true;
-      pGeo.attributes.aColor.needsUpdate = true;
-      pGeo.attributes.aSize.needsUpdate = true;
-      pGeo.attributes.aAlpha.needsUpdate = true;
-
-      // Labels
-      formatLabels.forEach(f => {
-        const o = smoothstep(f.t, f.t + 1.2, t) * (1 - smoothstep(44, 49, t));
-        f.sp.material.opacity = o;
-        f.sp.position.y = f.pos.y + Math.sin(t * f.floatFreq + f.floatPhase) * f.floatAmp;
-        f.sp.position.x = f.pos.x + Math.cos(t * f.floatFreq * 0.6 + f.floatPhase) * 0.12;
-        f.sp.visible = o > 0.01;
-      });
-
-      catLabels.forEach((c, i) => {
-        const o = smoothstep(c.t, c.t + 1.4, t) * (1 - smoothstep(70, 74, t));
-        c.sp.material.opacity = o;
-        c.sp.visible = o > 0.01;
-        const a = c.angle + t * c.speed;
-        c.sp.position.set(
-          Math.cos(a) * c.radius,
-          c.y + Math.sin(t * c.bobFreq + i * 1.3) * c.bobAmp,
-          Math.sin(a) * c.radius
-        );
-      });
-
-      if (t > 63) {
-        const f = smoothstep(63, 70, t);
-        coreGlowMat.opacity *= 1 - f * 0.35;
-      }
+      const closeFade = smoothstep(26.2, 27.5, t);
+      closingLabel.material.opacity = closeFade;
+      closingLabel.visible = closeFade > 0.01;
+      closingLabel.position.y = -4.3 + centerK * 0.3 + Math.sin(t * 0.8) * 0.08;
     }
 
-    /* ══════════════════════════════════════════════════════════════
-       RECORDING (CCapture + WAV)
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ RECORDING ══ */
     const AUTO_RECORD = new URLSearchParams(location.search).get('record') === '1';
     const FPS = 60;
     const recBtn = document.getElementById('recBtn');
@@ -1167,10 +1178,10 @@
 
     async function renderAudioTrack() {
       const sr = 44100;
-      const totalDur = TOTAL + 3.0;
+      const totalDur = TOTAL + 4.0;
       const ctx = new OfflineAudioContext(2, Math.ceil(totalDur * sr), sr);
-      for (const ev of vortexEvents) {
-        scheduleVortexOnCtx(ctx, ev.time, ev.duration, ev.intensity);
+      for (const ev of audioEvents) {
+        scheduleAudioEvent(ctx, ev.type, ev.time, ev.params);
       }
       const rendered = await ctx.startRendering();
       return audioBufferToWav(rendered);
@@ -1180,15 +1191,16 @@
       recBtn.disabled = true;
       recLabel.textContent = 'Recording';
       audioEnabled = false;
+      IS_RECORDING = true;
 
-      vortexEvents.length = 0;
+      audioEvents.length = 0;
       elapsed = 0;
-      nextScrape = 16.6;
       corePulseVal = 0;
       collected = 0;
-      scaleSpawnAcc = 0;
+      particleAcc = 0;
       pCursor = 0;
-      pending.length = 0;
+      firedAudioEvents.clear();
+
       particles.forEach(p => { p.active = false; });
       for (let i = 0; i < PARTICLE_MAX; i++) alphaArr[i] = 0;
       ringFX.forEach(r => { world.remove(r.mesh); r.mesh.material.dispose(); });
@@ -1198,22 +1210,17 @@
 
       if (typeof CCapture === 'undefined') {
         setStatus('ERROR: CCapture no cargó');
-        recBtn.disabled = false;
+        recBtn.disabled = false; IS_RECORDING = false;
         return;
       }
-
       setStatus('Iniciando grabador...');
 
       const capturer = new CCapture({
-        format: 'webm',
-        framerate: FPS,
-        quality: 100,
-        name: 'doxing-1080x1920',
-        verbose: false
+        format: 'webm', framerate: FPS, quality: 100,
+        name: 'doxing-darker-side', verbose: false
       });
 
       capturer.start();
-
       const totalFrames = Math.ceil((TOTAL + 1.5) * FPS);
 
       for (let frame = 0; frame <= totalFrames; frame++) {
@@ -1221,10 +1228,8 @@
         update(elapsed, 1 / FPS);
         renderer.render(scene, camera);
         capturer.capture(renderer.domElement);
-
         if (frame % 15 === 0) {
-          const pct = Math.round((frame / totalFrames) * 100);
-          setStatus(`Render ${frame}/${totalFrames} · ${pct}%`);
+          setStatus(`Render ${frame}/${totalFrames} · ${Math.round((frame / totalFrames) * 100)}%`);
           await new Promise(r => setTimeout(r, 0));
         }
       }
@@ -1232,38 +1237,26 @@
       setStatus('Codificando video...');
       capturer.stop();
       capturer.save();
-
-      // Esperar a que el guardado inicie
       await new Promise(r => setTimeout(r, 800));
 
       setStatus('Generando audio WAV...');
       try {
         const wavBlob = await renderAudioTrack();
-        downloadBlob(wavBlob, 'doxing-1080x1920.wav');
-      } catch (e) {
-        console.error('Audio render failed', e);
-      }
+        downloadBlob(wavBlob, 'doxing-darker-side.wav');
+      } catch (e) { console.error('Audio render failed', e); }
 
       setStatus('✓ Listo · video + wav descargados');
       setTimeout(hideStatus, 4000);
       recBtn.disabled = false;
       recLabel.textContent = 'Record';
       audioEnabled = true;
-      IS_RECORDING = false;   // ← NUEVO: reactiva el audio en vivo
+      IS_RECORDING = false;
     }
 
-    recBtn.addEventListener('click', () => {
-      if (!recBtn.disabled) runRecording();
-    });
+    recBtn.addEventListener('click', () => { if (!recBtn.disabled) runRecording(); });
+    if (AUTO_RECORD) setTimeout(runRecording, 800);
 
-    if (AUTO_RECORD) {
-      // Auto-arranque con ?record=1
-      setTimeout(runRecording, 800);
-    }
-
-    /* ══════════════════════════════════════════════════════════════
-       LOOP
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ LOOP ══ */
     const clock = new THREE.Clock();
 
     function animate() {
@@ -1277,9 +1270,7 @@
       renderer.render(scene, camera);
     }
 
-    /* ══════════════════════════════════════════════════════════════
-       RESIZE — sólo escala el CSS del stage, el render es fijo 1080x1920
-       ══════════════════════════════════════════════════════════════ */
+    /* ══ RESIZE ══ */
     function updateStageScale() {
       const s = Math.min(window.innerWidth / 1080, window.innerHeight / 1920);
       document.documentElement.style.setProperty('--stage-scale', s);
@@ -1288,7 +1279,6 @@
     window.addEventListener('orientationchange', () => setTimeout(updateStageScale, 120));
     updateStageScale();
 
-    /* Start */
     animate();
   </script>
 </body>
